@@ -1,0 +1,6 @@
+initThread 0 0 0
+blockDim 32 32 1
+blockIdx 0 0 0
+valOfInt wA #1
+valOfInt wB #1
+arrFloat B 1.0 2.0 1.0 1.0 2.0 1.0 1.0 1.0 2.0 1.0 1.0 1.0 2.0

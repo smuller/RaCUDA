@@ -1,0 +1,21 @@
+initThread 0 0 0
+blockDim 32 32 1
+valOfInt wA 32
+valOfInt wB 32
+blockIdx 0 0 0
+gridDim 1 1 1
+valOfInt numBlocks 10
+valOfInt isJulia 1
+valOfInt crunch 16
+valOfInt imageW 1023
+valOfInt imageH 1023
+valOfInt xOff 0
+valOfInt yOff 0
+valOfInt xJParam 0
+valOfInt yJParam 0
+valOfInt scale 10
+valOfInt colorsx 255
+valOfInt colorsy 0
+valOfInt colorsz 0
+valOfInt frame 5
+valOfInt gridWidth 1
