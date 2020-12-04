@@ -56,10 +56,10 @@ running any of the CUDA examples and may be missing.
 
 The above command runs the tool on the kernel <kernel>. The common options are:
   * `-metric <metric>` use the supplied resource metric. Supported metrics are:
-       – divwarps: number of conditional instructions that cause a warp to diverge.
-       – global: number of sectors read from/written to global memory.
-       – shared: number of bank conflicts in shared memory. 
-       – steps: count number of abstract instructions executed.
+       - divwarps: number of conditional instructions that cause a warp to diverge.
+       - global: number of sectors read from/written to global memory.
+       - shared: number of bank conflicts in shared memory. 
+       - steps: count number of abstract instructions executed.
   * `-eval`: run the tool in evaluation mode. In this mode, the tool does not
     perform a static resource analysis but rather simulates the execution of the
     kernel on a GPU and calculates the cost under th given resource metric using
