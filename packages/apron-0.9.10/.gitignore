@@ -1,0 +1,14 @@
+build.out
+build.err
+install.out
+install.err
+
+mlgmpidl/Makefile.config
+apron/mlapronidl/apron_lexer.ml
+apron/mlapronidl/apron_parser.ml
+apron/mlapronidl/apron_parser.mli
+apron/octagons/octtestD
+apron/octagons/octtestMPQ
+*.[oa]
+*.cm[ioxa]
+*.cmxa

@@ -1,0 +1,16 @@
+matrixMul.cu:matrixMul-0
+matrixMulBad.cu:matrixMul-0
+matrixMulTranspose.cu:matrixMul-0
+vectorAdd.cu:vectoradd-0
+reduce0.cu:reduce-0
+reduce1.cu:reduce-0
+reduce2.cu:reduce-0
+reduce2a.cu:reduce-0
+reduce3.cu:reduce-0
+reduce3a.cu:reduce-0
+addSub0.cu:addsub-0
+addSub1.cu:addsub-0
+addSub2.cu:addsub-0
+addSub3.cu:addsub-0
+syn-brdis.cu:brdis
+syn-brdis-opt.cu:brdis

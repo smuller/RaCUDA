@@ -1,0 +1,9 @@
+initThread 0 0 0
+blockDim 32 1 1
+valOfInt h 1
+valOfInt w 64
+blockIdx 0 0 0
+gridDim 1 1 1
+valOfInt l 0
+valOfInt u 0
+valOfInt r 1

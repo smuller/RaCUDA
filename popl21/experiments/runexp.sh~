@@ -1,0 +1,34 @@
+#!/bin/bash
+
+metrics='divwarps global shared steps'
+#metrics='shared'
+ABSYNTH='./source/absynth'
+PARAM_BASE=`pwd`'/cuda_kernels/params/'
+KERNEL_BASE=`pwd`'/cuda_kernels/'
+N=5
+
+for m in $metrics
+do
+    rm results/$m.csv
+    echo ""
+    echo ""
+    echo "------- STARTING METRIC $m --------"
+    for i in $(cat experiments)
+    do
+        pf=`echo $i | awk -F: '{print $2}'`
+        k=`echo $i | awk -F: '{print $1}'`
+        echo "$ABSYNTH -metric $m -param-file $PARAM_BASE$pf $KERNEL_BASE$k"
+	echo -n $k >> results/$m.csv
+	echo -n "," >> results/$m.csv
+
+	for j in $(seq 1 $N)
+	do
+            $ABSYNTH -metric $m -param-file $PARAM_BASE$pf $KERNEL_BASE$k > temp
+	    echo -n `sed -n 's/.* runtime: \(.*\)s/\1/p' < temp` >> results/$m.csv
+	    echo -n "," >> results/$m.csv
+	done
+	echo -n "\"" >> results/$m.csv
+	echo -n `sed -n 's/.*Bound: \(.*\)/\1/p' < temp` >> results/$m.csv
+	echo "\"" >> results/$m.csv
+    done
+done

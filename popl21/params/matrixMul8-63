@@ -1,0 +1,5 @@
+initThread 0 0 0
+blockDim 8 8 1
+valOfInt wA 63
+valOfInt wB 63
+blockIdx 0 0 0

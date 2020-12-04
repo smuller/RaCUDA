@@ -1,0 +1,3 @@
+initThread 0 0 0
+blockDim 8 8 1
+blockIdx 0 0 0

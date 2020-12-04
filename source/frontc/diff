@@ -1,0 +1,60 @@
+56,57d55
+<     | BASE_GLOBAL
+<     | BASE_SHARED
+94,96c92
+< 	   (GNU_TYPE (attrs, typ), sto)
+<     | BASE_GLOBAL -> (GLOBAL typ, sto)
+<     | BASE_SHARED -> (SHARED typ, sto)
+---
+> 		(GNU_TYPE (attrs, typ), sto)
+187d182
+< %token TEMPLATE GLOBAL SHARED
+258c253
+< %type <(string * int) * Cabs.statement> body
+---
+> %type <(string * int) * (Cabs.definition list * Cabs.statement)> body
+291c286
+<                    FUNDEF (set_single $1 $2, (snd $3))
+---
+> 					FUNDEF (set_single $1 $2, (snd $3))
+306,308c301
+< 			 TYPEDEF (set_name_group (fst $3, snd $3) $4, $1)}
+< |       TEMPLATE INF global_type global_defs SUP global
+<             { Printf.fprintf stderr "template\n"; $6 }
+---
+> 			TYPEDEF (set_name_group (fst $3, snd $3) $4, $1)}
+333,334d325
+< |       GLOBAL                          {BASE_GLOBAL}
+< |       SHARED                          {BASE_SHARED}
+473c464
+< 		  {DECDEF (set_name_group $1 (List.rev $2))}
+---
+> 			{DECDEF (set_name_group $1 (List.rev $2))}
+1005c996
+< 		LBRACE 							{Clexer.push_context (); Printf.fprintf stderr "begin body\n";$1}
+---
+> 		LBRACE 							{Clexer.push_context (); $1}
+1008,1009c999
+<   twolocals opt_stats 			{ List.fold_left (fun s l ->
+<                                       (SEQUENCE (DEFINITION l, s))) $2 $1 }
+---
+> 		opt_locals opt_stats 			{($1, $2)}
+1022,1024d1011
+< twolocals:
+<       local local {[$1; $2]}
+< ;
+1033,1042c1020,1022
+<   statement:
+<     /*
+<         local_type local_def SEMICOLON
+<           { set_line $3 (DEFINITION (DECDEF (set_name_group $1 [$2]))) }
+<         */
+<        /* local
+<           { DEFINITION $1 } */
+< |		SEMICOLON
+< 		  {set_line $1 NOP}
+< 
+---
+> statement:
+> 		SEMICOLON
+> 			{set_line $1 NOP}							

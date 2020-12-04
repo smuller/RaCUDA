@@ -1,0 +1,31 @@
+                      Debugging
+                      ---------
+
+First, you can build a bytecode executable of the
+analysis with debugging symbols embedded using the
+command "make Driver.d.byte".
+
+Then, if you have a problem with an exception, you
+should use
+
+    export OCAMLRUNPARM=b
+
+inside the terminal you're using.  This will display
+the backtrace when an exception is raised.
+
+- Snippets
+----------
+
+During my debugging adventures I sometimes write
+code useful to see what is going on.
+
+Analysis.Potential.solve
+
+      let f s sol =
+        Format.eprintf "@.--- %s@." s;
+        Format.eprintf "VMAX = %g@." sol.(vmax);
+        List.iter2 (fun pol k ->
+          let k = sol.(k) in
+          if abs_float k >= fsmall then Format.eprintf "%g %a@." k Poly.print pol)
+          (List.rev pl) kpl
+      in

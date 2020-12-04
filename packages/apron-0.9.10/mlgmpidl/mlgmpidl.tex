@@ -1,0 +1,54 @@
+\documentclass[[twoside,10pt,a4paper]{report}
+\usepackage[latin1]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{ae}
+\usepackage{fullpage}
+\usepackage{url}
+\usepackage{ocamldoc}
+\usepackage{makeidx}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0.9pt}
+\renewcommand{\footrulewidth}{0pt}
+\setlength{\headheight}{2.8ex}
+\setlength{\footskip}{5ex}
+\renewcommand{\chaptermark}[1]{ %
+  \markboth{\MakeUppercase{\chaptername}\ \thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{}
+\setcounter{tocdepth}{0}
+\setcounter{secnumdepth}{4}
+\usepackage{color}
+\definecolor{mygreen}{rgb}{0,0.6,0}
+
+\usepackage[ps2pdf]{hyperref}
+
+\setlength{\parindent}{0em}
+\setlength{\parskip}{0.5ex}
+
+%\usepackage{listings}
+%\lstloadlanguages{Caml}
+
+\makeindex
+
+\title{MLGMPIDL: OCaml interface for GMP and MPFR libraries (version 1.1)}
+\begin{document}
+\maketitle
+
+\vspace*{0.9\textheight}
+
+All files distributed in the MLGMPIDL interface are
+distributed under LGPL license.
+
+Copyright (C) Bertrand Jeannet 2005-2009 for the MLGMPIDL
+interface.
+
+\newpage
+
+\tableofcontents
+
+\input{ocamldoc.tex}
+
+\appendix
+\printindex
+\end{document}
