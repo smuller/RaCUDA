@@ -20,23 +20,23 @@ the main configure script, see ./configure -help for details.
 This repository also contains, in the folder `popl21', the following
 items specific to our POPL '21 paper:
 
-  * `coq': Coq scripts
-  * `curesults': Profiling results for GPU executions of kernels.
-  * `experiments': Experiment scripts for reproducing the POPL '21
+  * `coq`: Coq scripts
+  * `curesults`: Profiling results for GPU executions of kernels.
+  * `experiments`: Experiment scripts for reproducing the POPL '21
     results
-  * `kernels': The CUDA kernels used as benchmarks in the evaluation.
+  * `kernels`: The CUDA kernels used as benchmarks in the evaluation.
     These may overlap with the example kernels in the top level of the
     repo, but are included here as a record of the benchmarks used in
     the POPL '21 evaluation
-  * `model-eval': Spreadsheets of the results comparing the evaluation
+  * `model-eval`: Spreadsheets of the results comparing the evaluation
     costs obtained by simulating the cost semantics in the paper with
     those obtained from profiling GPU executions.
-  * `paper-analysis-results': Results from analyzing the kernels in our
+  * `paper-analysis-results`: Results from analyzing the kernels in our
     experiments.
-  * `params': Parameter files for use in analyzing and simulating the
+  * `params`: Parameter files for use in analyzing and simulating the
      benchmark kernels.
-  * `plot': gnuplot files and plots for Figure 7 of the paper.
-  * `simresults': Results from simulating execution of the kernels in
+  * `plot`: gnuplot files and plots for Figure 7 of the paper.
+  * `simresults`: Results from simulating execution of the kernels in
     our experiments.
 
 ## To build RaCUDA:
@@ -55,16 +55,16 @@ running any of the CUDA examples and may be missing.
     absynth-cuda [-eval] -metric <metric> [-param-file <param file>] <kernel>
 
 The above command runs the tool on the kernel <kernel>. The common options are:
-  * `-metric <metric>' use the supplied resource metric. Supported metrics are:
-    – divwarps: number of conditional instructions that cause a warp to diverge.
-    – global: number of sectors read from/written to global memory.
-    – shared: number of bank conflicts in shared memory. 
-    – steps: count number of abstract instructions executed.
-  * `-eval': run the tool in evaluation mode. In this mode, the tool does not
+  * `-metric <metric>` use the supplied resource metric. Supported metrics are:
+     – divwarps: number of conditional instructions that cause a warp to diverge.
+     – global: number of sectors read from/written to global memory.
+     – shared: number of bank conflicts in shared memory. 
+     – steps: count number of abstract instructions executed.
+  * `-eval`: run the tool in evaluation mode. In this mode, the tool does not
     perform a static resource analysis but rather simulates the execution of the
     kernel on a GPU and calculates the cost under th given resource metric using
     the cost model from our paper.
-  * `-param-file <file>': load parameters from <file>. Parameters include block
+  * `-param-file <file>`: load parameters from <file>. Parameters include block
     and grid size. For evaluation mode, initial values of any variables that
     affect control flow must be supplied. Parameter file is optional for
     analysis mode; default parameters will be used. Parameter files for each kernel are
