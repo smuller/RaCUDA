@@ -62,17 +62,15 @@ The above command runs the tool on the kernel <kernel>. The common options are:
        - steps: count number of abstract instructions executed.
   * `-eval`: run the tool in evaluation mode. In this mode, the tool does not
     perform a static resource analysis but rather simulates the execution of the
-    kernel on a GPU and calculates the cost under th given resource metric using
-    the cost model from our paper.
+    kernel on a GPU and calculates the cost under the given resource metric using
+    the cost model from our POPL '21 paper.
   * `-param-file <file>`: load parameters from <file>. Parameters include block
     and grid size. For evaluation mode, initial values of any variables that
     affect control flow must be supplied. Parameter file is optional for
-    analysis mode; default parameters will be used. Parameter files for each kernel are
-available in popl20/params (do not use or modify parameter files ending in -temp; these are templates
-used by the experiment scripts).
-
-    source/absynth examples/probabilistic/linear/race.imp
-    source/absynth -degree 2 examples/probabilistic/polynomial/trader.imp
+    analysis mode; default parameters will be used. Parameter files for each
+    kernel from our POPL '21 paper are available in popl21/params (do not use or
+    modify parameter files ending in -temp; these are templates used by the
+    experiment scripts).
 
 ## Examples
 
