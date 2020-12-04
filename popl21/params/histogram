@@ -1,0 +1,4 @@
+initThread 0 0 0
+blockDim 64 1 1
+blockIdx 0 0 0
+gridDim 1 1 1

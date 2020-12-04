@@ -1,0 +1,16 @@
+build.err
+build.out
+install.err
+install.out
+
+compiler/camlidl
+compiler/config.ml
+compiler/lexer_midl.ml
+compiler/linenum.ml
+compiler/parser_midl.ml
+compiler/parser_midl.mli
+compiler/parser_midl.output
+*.cm[ioxa]
+*.cmxa
+*.o
+*.a
