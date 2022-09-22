@@ -176,10 +176,11 @@ let p_none = { pos_file = "";
 let charge_block cost b =
   { b with I.b_body = (costi cost, p_none)::b.I.b_body }
 
-let block_of_instrs is =
+let block_of_instrs a is =
   { I.b_start_p = p_none;
     I.b_end_p = p_none;
-    I.b_body = List.map (fun i -> (i, p_none)) is }
+    I.b_body = List.map (fun i -> (i, p_none)) is;
+    I.annot = a }
 
 let add_to_block b is =
   { b with I.b_body = b.I.b_body @ (List.map (fun i -> (i, p_none)) is) }
@@ -269,9 +270,11 @@ let charge_var m v l =
   if var_is_free v then l
   else charge (m KVar) l
 
-let rec imp_of_cexpr vctx p m e =
-  match e with
-  | CL (CVar id) -> (charge (if var_is_free id then 0 else m KVar) [], EVar id)
+let rec imp_of_cexpr da vctx p m e =
+  let mka = mk (ann e) in
+  match edesc e with
+  | CL (CVar id) -> (charge (if var_is_free id then 0 else m KVar) [],
+                     mka (EVar id))
   | CL (CArr (CVar id, inds)) ->
      let (mem, size, dims) = IdMap.find id vctx in
      (* let _ = Printf.printf "dims(%s) = %d\n" id ((List.length dims) + 1) in
@@ -280,14 +283,16 @@ let rec imp_of_cexpr vctx p m e =
        try
          List.fold_right2
            (fun ind dim (vc, e) ->
-             match ind with
+             match edesc ind with
              | CL (CVar id) ->
                 ((if var_is_free id then vc else vc + (m KVar)),
-                 EAdd (EVar id, EMul (e, ENum dim)))
+                 mk (da ()) (EAdd (mk (da ()) (EVar id),
+                                   mk (da ()) (EMul (e, mk (da ())
+                                                          (ENum dim))))))
              | _ -> raise NotNormalized)
            inds
            ((List.rev dims) @ [1])
-           (0, ENum 0)
+           (0, mk (da ()) (ENum 0))
        with Invalid_argument _ -> failwith "mis-dimensioned array"
      in
      let ind_var = new_var () in
@@ -299,8 +304,11 @@ let rec imp_of_cexpr vctx p m e =
        | Global -> [I.ITickMemReads (ind_var, size, false, true)]
        | Local -> [I.ITick (m KVar)]
      in
+     (* As an optimization, could just not emit this assignment
+      * if ind is a variable *)
+     let _ = add_var_exp ind_var ind in
      ((costi vc)::I.IAssign (ind_var, ind)::c @
-           [I.ICallUninterp (rvar, id, [ind_var])], EVar rvar)
+           [I.ICallUninterp (rvar, id, [ind_var])], mka (EVar rvar))
   | CL (CDeref (CVar id)) ->
      let (mem, _, _) = IdMap.find id vctx in
      let c = m (KArrRead (mem,
@@ -308,25 +316,25 @@ let rec imp_of_cexpr vctx p m e =
                            | Shared -> p.warp_size
                            | _ -> 1)))
      in
-     (charge (c ++ (m (KUnop UDeref))) [], EVar id)
+     (charge (c ++ (m (KUnop UDeref))) [], mka (EVar id))
   | CL (CRef (CVar id)) ->
-     (charge ((m KVar) ++ (m (KUnop URef))) [], EVar id)
-  | CConst (CInt n) -> (charge (m KConst) [], ENum n)
-  | CConst _ -> (charge (m KConst) [], ENum 0)
-  | CParam e -> (charge (m KConst) [], imp_of_param p e)
-  | CAdd (CL (CVar x1), CL (CVar x2)) ->
+     (charge ((m KVar) ++ (m (KUnop URef))) [], mka (EVar id))
+  | CConst (CInt n) -> (charge (m KConst) [], mka (ENum n))
+  | CConst _ -> (charge (m KConst) [], mka (ENum 0))
+  | CParam e -> (charge (m KConst) [], mka (imp_of_param p e))
+  | CAdd ((a1, CL (CVar x1)), (a2, CL (CVar x2))) ->
      (charge (m (KBinop BAdd))
         (charge_var m x1 (charge_var m x2 [])),
-      EAdd (EVar x1, EVar x2))
-  | CSub (CL (CVar x1), CL (CVar x2)) ->
+      mka (EAdd (mk a1 (EVar x1), mk a2 (EVar x2))))
+  | CSub ((a1, CL (CVar x1)), (a2, CL (CVar x2))) ->
      (charge (m (KBinop BSub))
         (charge_var m x1 (charge_var m x2 [])),
-      ESub (EVar x1, EVar x2))
-  | CMul (CL (CVar x1), CL (CVar x2)) ->
+      mka (ESub (mk a1 (EVar x1), mk a2 (EVar x2))))
+  | CMul ((a1, CL (CVar x1)), (a2, CL (CVar x2))) ->
           (charge (m (KBinop BMul))
         (charge_var m x1 (charge_var m x2 [])),
-      EMul (EVar x1, EVar x2))
-  | CDiv (CL (CVar x1), CL (CVar x2)) ->
+      mka (EMul (mk a1 (EVar x1), mk a2 (EVar x2))))
+  | CDiv ((_, CL (CVar x1)), (_, CL (CVar x2))) ->
      let rvar = new_var () in
      (charge (m (KBinop BDiv))
         (charge_var m x1
@@ -338,8 +346,8 @@ let rec imp_of_cexpr vctx p m e =
                                     I.IAssign (rvar, EAdd (EVar rvar, ENum 1))])],
        *)
       (* [I.IAssume (LCmp (EMul (EVar rvar, EVar x2), Eq, EVar x1))], *)
-      EVar rvar)
-  | CMod (CL (CVar x1), CL (CVar x2)) ->
+      mka (EVar rvar))
+  | CMod ((_, CL (CVar x1)), (_, CL (CVar x2))) ->
      let rvar = new_var () in
      (charge (m (KBinop BMod))
         (charge_var m x1
@@ -350,10 +358,12 @@ let rec imp_of_cexpr vctx p m e =
               (*
                I.IAssume (LAnd (LCmp (EVar rvar, Ge, ENum 0),
                                 LCmp (EVar rvar, Lt, EVar x2)))*)])),
-      EVar rvar)
+      mka (EVar rvar))
   | _ -> raise NotNormalized
 
-let rec imp_of_clogic vctx p m l =
+let rec imp_of_clogic da vctx p m l =
+  let imp_of_cexpr = imp_of_cexpr da in
+  let imp_of_clogic = imp_of_clogic da in
   match l with
   | CCmp (e1, c, e2) ->
      let (is1, e1) = imp_of_cexpr vctx p m e1 in
@@ -371,17 +381,22 @@ let rec imp_of_clogic vctx p m l =
      let (is, l) = imp_of_clogic vctx p m l in
      (charge (m (KUnop UNot)) is, LNot l)
 
-let rec imp_of_cinstr vctx p m i =
+let block_is_empty (_, b) = b = []
+     
+let rec imp_of_cinstr a vctx p m i =
+  let imp_of_cinstr = imp_of_cinstr a in
+  let imp_of_cexpr = imp_of_cexpr a in
+  let imp_of_clogic = imp_of_clogic a in
   match i with
   | CBreak -> ([costi (m KBreak); I.IBreak], vctx)
   | CDecl (id, mem, t, dims) -> ([costi (m (KDecl mem))],
                                  add_var vctx id (mem, p.sizeof t, dims))
   | CAssign (lv, e, free) ->
      (match (e, lv) with
-        (CCall (f, args), CVar r) ->
+        ((_, CCall (f, args)), CVar r) ->
          let (arg_c, arg_ids) =
            List.fold_left (fun (c, ids) arg ->
-               match arg with (CL (CVar x)) ->
+               match edesc arg with (CL (CVar x)) ->
                                ((if var_is_free x then c else c + (m KVar)),
                                 x::ids)
                             | _ -> raise NotNormalized)
@@ -396,8 +411,8 @@ let rec imp_of_cinstr vctx p m i =
      (let (is, e) = imp_of_cexpr vctx p m e in
       match lv with
       | CVar id ->
-         ((match e with
-           | EVar t -> add_var_exp t (EVar id)
+         ((match desc e with
+           | EVar t -> add_var_exp t (mk () (EVar id))
            | _ -> ());
           (is @ [costi (if free then 0 else m KLocAssign);
                  I.IAssign (id, e)], vctx))
@@ -407,14 +422,16 @@ let rec imp_of_cinstr vctx p m i =
            try
              List.fold_right2
                (fun ind dim (vc, e) ->
-                 match ind with
+                 match edesc ind with
                  | CL (CVar id) ->
                     ((if var_is_free id then vc else vc + (m KVar)),
-                     EAdd (EVar id, EMul (e, ENum dim)))
+                     mk (a ()) (EAdd (mk (a ()) (EVar id),
+                                      mk (a ()) (EMul (e,
+                                                       mk (a ()) (ENum dim))))))
                  | _ -> raise NotNormalized)
                inds
                ((List.rev dims) @ [1])
-               (0, ENum 0)
+               (0, mk (a ()) (ENum 0))
            with Invalid_argument _ -> failwith "mis-dimensioned array"
          in
          let ind_var = new_var () in
@@ -439,11 +456,11 @@ let rec imp_of_cinstr vctx p m i =
 
   (* comment if counting divwarps without else branch *)
 
-  | CIf (l, s, []) ->
+  | CIf (l, s, b) when block_is_empty b ->
      let (is, l) = imp_of_clogic vctx p m l in
      let (s, _) = imp_of_block vctx p m s in
      (is @ [costi (m KIf); I.IIfNoElse (l, charge_block (m KThen) s)], vctx)
-  | CIf (l, [], s) ->
+  | CIf (l, b, s) when block_is_empty b ->
      let (is, l) = imp_of_clogic vctx p m l in
      let (s, _) = imp_of_block vctx p m s in
      (is @ [costi (m KIf); I.IIfNoElse (LNot l,
@@ -464,36 +481,39 @@ let rec imp_of_cinstr vctx p m i =
       vctx)
   | CFor ([], l, s2, s3) ->
      let (is, l) = imp_of_clogic vctx p m l in
-     let (s2, _) = imp_of_block vctx p m s2 in
+     let (s2, _) = imp_of_cinstr_list vctx a p m s2 in
      let (s3, _) = imp_of_block vctx p m s3 in
      (is @ [costi (m KIf); I.IWhile (l, charge_block ((m KThen) ++ (m KIf))
-                                          (block_of_instrs
-                                             ((List.map fst s3.b_body) @
-                                                (List.map fst s2.b_body) @
+                                          (block_of_instrs s3.I.annot
+                                             ((List.map fst s3.I.b_body) @
+                                                (List.map fst s2.I.b_body) @
                                                   is)));
             costi (m KElse)],
       vctx)
-  | CReturn (CL (CVar id)) ->
+  | CReturn (_, CL (CVar id)) ->
      ([costi (m KReturn); I.IReturn [id]], vctx)
   | CSync ->
      ([costi (m KSync)], vctx)
   | _ -> raise NotNormalized
-and imp_of_block vctx p m b =
+and imp_of_cinstr_list vctx a p m l =
   let (is, vctx') =
     List.fold_left (fun (is, vctx) i ->
-        let (is', vctx') = imp_of_cinstr vctx p m i in
+        let (is', vctx') = imp_of_cinstr a vctx p m i in
         (is @ is', vctx'))
       ([], vctx)
-      b
+      l
   in
-  (block_of_instrs is, vctx')
+  (block_of_instrs (a ()) is, vctx')
+and imp_of_block vctx p m ((a, b) : 'a cblock) : 'a I.block * 'b =
+  imp_of_cinstr_list vctx (fun () -> a) p m b
+  
 
 let dom m =
   List.fold_left (fun s (k, _) -> IdSet.add k s)
     IdSet.empty
     (IdMap.bindings m)
 
-let imp_of_func vctx p m (s, ids, b, is_kernel)  =
+let imp_of_func vctx p m ((_, s, ids, b, is_kernel) : 'a cfunc) : 'a I.func  =
   let vctx = List.fold_left
                (fun vctx (v, t) -> add_var vctx v (Global, p.sizeof t, []))
                vctx
@@ -512,7 +532,8 @@ let imp_of_func vctx p m (s, ids, b, is_kernel)  =
     fun_args = List.map fst ids
   }
 
-let imp_of_prog p m (globals, funcs) =
+let imp_of_prog p m ((globals, funcs) : 'a CUDA_Types.cprog) :
+      'b * ('a I.func list) =
   let (global, funcs) = normalize_prog (globals, funcs) in
   (* let _ = print_cprog Format.std_formatter (global, funcs) in *)
   (List.map (fun (x, _, _) -> x) globals,

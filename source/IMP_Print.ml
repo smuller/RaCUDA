@@ -5,7 +5,7 @@ open IMP_Types
 let ps = pp_print_string
 
 let rec print_expr fmt e =
-  match e with
+  match desc e with
   | EVar v -> ps fmt v
   | ENum n -> pp_print_int fmt n
   | EAdd (e1, e2) -> fprintf fmt "@[%a@ + %a@]" print_expr e1 print_expr e2

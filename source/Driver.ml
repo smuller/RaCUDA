@@ -39,6 +39,7 @@ let neededness = ref false
 let eval = ref false
 let param_file = ref None
 let cuda_metric = ref None
+let output_opt = ref None
 
 let usagemsg = Printf.sprintf "usage: %s [OPTIONS] FILE/INPUT_CHANNEL\n" Sys.argv.(0)
 let argspec = Arg.align
@@ -107,6 +108,9 @@ let argspec = Arg.align
                                        | "global" -> cmetric_global
                                        | "shared" -> cmetric_shared)))),
     " specify the cost metric for CUDA analysis or evaluation"
+
+  ; "-opt", Arg.String (fun s -> output_opt := Some s),
+    "<file> Optimize kernel and output to <file>"
   ]
 
 let annonarg s =
@@ -164,7 +168,8 @@ let entry () =
   let main_analyze () = 
     let params = ref None in
 
-    let globals, g_funcl = try
+    (* let globals, g_funcl = try *)
+    let progs_to_analyze = try
       (* CFG: if input is in block format *)
       if !input_file = "" then
         begin
@@ -172,7 +177,7 @@ let entry () =
           let globals = Cquery_cfg.get_glos () in
           let mainf_name, g_cfg = Cquery_cfg.graph_from_main (not !no_sampling_transformation) tick_var in
           implicit_main := Some mainf_name;
-          Utils.add_tick_var tick_var globals, g_cfg
+          [Utils.add_tick_var tick_var globals, g_cfg, None]
         end
       (* CFG: if input file is in CS format *)
       else if ends_with ".cs" !input_file then
@@ -181,21 +186,23 @@ let entry () =
           let globals = Cquery_cs.get_glos () in
           let mainf_name, g_cfg = Cquery_cs.graph_from_main (not !no_sampling_transformation) tick_var in
           implicit_main := Some mainf_name;
-          Utils.add_tick_var tick_var globals, g_cfg
+          [Utils.add_tick_var tick_var globals, g_cfg, None]
         end
       (* CFG: if input file is in IMP format *)
       else if ends_with ".imp" !input_file then
         let globals, imp_file = IMP.parse_file !input_file in
         (* transform function calls with arguments and return values *)
-        let globals, imp_file = IMP.function_call_transformation globals imp_file in
-        Utils.add_tick_var tick_var globals, 
-        List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file
+        let globals, imp_file = IMP.function_call_transformation (fun () -> ()) globals imp_file in
+        [Utils.add_tick_var tick_var globals, 
+         List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file,
+        None]
      (* CFG: if input fule is in CUDA-C format *)
       else if ends_with ".cu" !input_file then
         match Frontc.parse_file !input_file stdout with
         | Frontc.PARSING_ERROR -> failwith "parse error"
         | Frontc.PARSING_OK ccode ->
-           let cuda = CUDA.cuda_of_file !input_file ccode in
+           let cuda =
+             CUDA.cuda_of_file (fun () -> ()) !input_file ccode in
            let p =
              (match !param_file with
               | Some s -> let (p, _, _) = CUDA_Params.params_of_file s in p
@@ -206,15 +213,20 @@ let entry () =
                     | None -> failwith "no metric specified")
            in
            let _ = params := Some (p, m) in
-           let (globals, imp_file) =
-             CUDA_Cost.imp_of_prog p m cuda
+           let ret_cuda_prog cuda =
+             let (globals, imp_file) =
+               CUDA_Cost.imp_of_prog p m cuda
+             in
+             (* let _ = IMP_Print.print_prog Format.std_formatter
+                (globals, imp_file) in *)
+             (* transform function calls with arguments and return values *)
+             let globals, imp_file = IMP.function_call_transformation (fun () -> ()) globals imp_file in
+             Utils.add_tick_var tick_var globals, 
+             List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file,
+             Some cuda
            in
-           (* let _ = IMP_Print.print_prog Format.std_formatter
-                     (globals, imp_file) in *)
-           (* transform function calls with arguments and return values *)
-        let globals, imp_file = IMP.function_call_transformation globals imp_file in
-        Utils.add_tick_var tick_var globals, 
-        List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file
+           [ret_cuda_prog cuda]
+           
       (* CFG: if input file is in LLVM bit-code format *)
       else if ends_with ".o" !input_file || ends_with ".bc" !input_file then
         let ic = exec_llvm_reader !input_file in
@@ -222,7 +234,7 @@ let entry () =
           try
             let gfunc = Graph_Reader.read_func ic in
             let gfunc = Graph.add_loop_counter tick_var gfunc in
-            [], [gfunc]
+            [[], [gfunc], None]
           with End_of_file ->
             match Unix.close_process_in ic with
             | Unix.WEXITED 0 -> 
@@ -244,173 +256,200 @@ let entry () =
       raise Utils.Error
     in
 
+    let analyze_prog (globals, g_funcl) =
     (* for testing: the CFG *)
-    if !dump_cfg then
-      begin
-        let oc = open_out "graph_prog.cfg" in 
-        Graph.print_graph_prg oc globals g_funcl;
-        close_out oc
-      end;
-  
-    (* get the start function *)
-    let fstart =
-      match !main_func with
-      | Some f -> f
-      | None ->
-        if List.length g_funcl = 1 then 
-          let f = List.hd g_funcl in 
-          f.fun_name
-        else 
-          begin
-            match !implicit_main with
-            | Some f -> f 
-            | None -> "start"
-          end
-    in
-
-    (* check that the existance of the main function *)
-    if not (List.exists (fun f -> f.Types.fun_name = fstart) g_funcl) then 
-      failarg (Printf.sprintf "cannot find function '%s' to analyze" fstart);
-
-    (* add weaken heuristically *)
-    let g_funcl =
-      if !no_weaken then g_funcl else
-        List.map Heuristics.add_weaken g_funcl
-    in
-
-    (* for testing: the CFG with weakennings *)
-    if !dump_cfg then
-    begin
-      let oc = open_out "graph_prog_weaken.cfg" in 
-      Graph.print_graph_prg oc globals g_funcl;
-      close_out oc
-    end;
-
-    (* topology order the CFGs *)
-    let g_funcl = List.map Graph.rpo_order g_funcl in
-
-    (* generate an AI *)
-    let module AI = (val begin
-        match !ai with
-        (* | "apron" -> (module Graph.AbsInt.Apron) *)
-        | _       -> (module Graph.AbsInt.Simple)
-      end: Graph.AbsInt)
-    in
-
-    (* analyze a function *)
-    let analyze_fun f_name =
-      (* performing AI *)
-      let ai_results =
-        AI.analyze ~dump:!dump_ai (!params) (globals, g_funcl) f_name in
-
-      let query =
-        let open Polynom in
-        (Poly.of_monom (Monom.of_var tick_var) (+1.))
-      in
-
-      (* For each degree from 1 to !degree, heuristically add focus functions and 
-       * compute the result until it finds a valid result. Thus, if users give very big 
-       * degree (e.g., 100) but in fact the bound has 1 degree then try_run only run 
-       * 1 iteration
-       *)
-      let g_funcl, st_results =
-        let rec try_run d =
-          if d > !degree then 
-            (g_funcl, None) 
-          else 
-            begin
-              let g_funcl = 
-                if !no_focus then 
-                  g_funcl
-                else
-                  (* Heuristic.add_focus needs to be checked, it seems to run forever for some special functions *)
-                  g_funcl 
-                  |> List.map (Heuristics.add_focus ~degree:d ai_results AI.get_nonneg AI.is_nonneg)
-                  |> List.map (Heuristics.add_focus_old ~degree:d ai_results AI.get_nonneg AI.is_nonneg)
-              in
-              match
-                Analysis.run ai_results AI.is_bot AI.is_nonneg (globals, g_funcl) f_name d !analysis_type query tick_var !neededness !dump_neededness
-              with
-              | None -> try_run (d+1)
-              | Some sol -> (g_funcl, Some sol)
-            end
-        in try_run 1
-      in
-
-      let poly_print =
-        if !ascii then Polynom.Poly.print_ascii else Polynom.Poly.print
-      in
-
-      (* print the result *)
-      printf "@.%s:@.    @[<v>" f_name;
-
-      match st_results with
-      | None ->
-        printf "Sorry, I could not find a bound@ ";
-        1
-      | Some (annots, p) -> 
+      if !dump_cfg then
         begin
-          match !analysis_type with
-          | Analysis.Water_mark -> 
-             printf "Bound: %a@ " poly_print (CUDA.lookup_poly
-                                                (Polynom.Poly.sub p query))
-          | Analysis.Size_change -> 
-             printf "Bound: %a@ " poly_print (CUDA.lookup_poly
-                                                (Polynom.Poly.sub p query))
+          let oc = open_out "graph_prog.cfg" in 
+          Graph.print_graph_prg oc globals g_funcl;
+          close_out oc
         end;
-        Format.printf "Degree: %d@ " (Polynom.Poly.degree p);
+      
+      (* get the start function *)
+      let fstart =
+        match !main_func with
+        | Some f -> f
+        | None ->
+           if List.length g_funcl = 1 then 
+             let f = List.hd g_funcl in 
+             f.fun_name
+           else 
+             begin
+               match !implicit_main with
+               | Some f -> f 
+               | None -> "start"
+             end
+      in
+      
+      (* check that the existance of the main function *)
+      if not (List.exists (fun f -> f.Types.fun_name = fstart) g_funcl) then 
+        failarg (Printf.sprintf "cannot find function '%s' to analyze" fstart);
+      
+      (* add weaken heuristically *)
+      let g_funcl =
+        if !no_weaken then g_funcl else
+          List.map Heuristics.add_weaken g_funcl
+      in
+      
+      (* for testing: the CFG with weakennings *)
+      if !dump_cfg then
+        begin
+          let oc = open_out "graph_prog_weaken.cfg" in 
+          Graph.print_graph_prg oc globals g_funcl;
+          close_out oc
+        end;
+      
+      (* topology order the CFGs *)
+      let g_funcl = List.map Graph.rpo_order g_funcl in
 
-        (* print statistic information *)
-        if !dump_stats then 
-          begin
-            let { Analysis.num_lpvars; num_lpcons; max_focus; lp_runtime } = Analysis.stats in
-            printf "Number of LP variables: %d@ " num_lpvars;
-            printf "Number of LP constraints: %d@ " num_lpcons;
-            printf "Maximum focus functions in use: %d@ " max_focus;
-            printf "LP solver time: %.3fs@ " !lp_runtime
-          end;
-        printf "@]@.";
+      (* generate an AI *)
+      let module AI = (val begin
+                         match !ai with
+                         (* | "apron" -> (module Graph.AbsInt.Apron) *)
+                         | _       -> (module Graph.AbsInt.Simple)
+                                        end: Graph.AbsInt)
+      in
 
-        (* generate Coq proof *)
-        if !dump_coq then
-          begin
-            let generated_proof_name = f_name ^ "_" ^ generated_proof_name in
-            try
-              Coqgen.dump generated_proof_name f_name (globals, g_funcl) query p AI.print_as_coq ai_results annots
-            with 
-              Utils.Todo what ->
+      (* analyze a function *)
+      let analyze_fun f_name =
+        (* performing AI *)
+        let ai_results =
+          AI.analyze ~dump:!dump_ai (!params) (globals, g_funcl) f_name in
+
+        let query =
+          let open Polynom in
+          (Poly.of_monom (Monom.of_var tick_var) (+1.))
+        in
+
+        (* For each degree from 1 to !degree, heuristically add focus functions and 
+         * compute the result until it finds a valid result. Thus, if users give very big 
+         * degree (e.g., 100) but in fact the bound has 1 degree then try_run only run 
+         * 1 iteration
+         *)
+        let g_funcl, st_results =
+          let rec try_run d =
+            if d > !degree then 
+              (g_funcl, None) 
+            else 
               begin
-                if Sys.file_exists generated_proof_name then
-                  Sys.remove generated_proof_name;
-                Format.eprintf "Coq extraction failure (%s)@." what
+                let g_funcl = 
+                  if !no_focus then 
+                    g_funcl
+                  else
+                    (* Heuristic.add_focus needs to be checked, it seems to run forever for some special functions *)
+                    g_funcl 
+                    |> List.map (Heuristics.add_focus ~degree:d ai_results AI.get_nonneg AI.is_nonneg)
+                    |> List.map (Heuristics.add_focus_old ~degree:d ai_results AI.get_nonneg AI.is_nonneg)
+                in
+                match
+                  Analysis.run ai_results AI.is_bot AI.is_nonneg (globals, g_funcl) f_name d !analysis_type query tick_var !neededness !dump_neededness
+                with
+                | None -> try_run (d+1)
+                | Some sol -> (g_funcl, Some sol)
               end
-          end;
-      0
+          in try_run 1
+        in
+
+        let poly_print =
+          if !ascii then Polynom.Poly.print_ascii else Polynom.Poly.print
+        in
+
+        (* print the result *)
+        printf "@.%s:@.    @[<v>" f_name;
+
+        (match st_results with
+        | None ->
+           printf "Sorry, I could not find a bound@ "
+        | Some (annots, p) -> 
+           begin
+             match !analysis_type with
+             | Analysis.Water_mark -> 
+                printf "Bound: %a@ " poly_print (CUDA.lookup_poly
+                                                   (Polynom.Poly.sub p query))
+             | Analysis.Size_change -> 
+                printf "Bound: %a@ " poly_print (CUDA.lookup_poly
+                                                   (Polynom.Poly.sub p query))
+           end;
+           Format.printf "Degree: %d@ " (Polynom.Poly.degree p);
+
+           (* print statistic information *)
+           if !dump_stats then 
+             begin
+               let { Analysis.num_lpvars; num_lpcons; max_focus; lp_runtime } = Analysis.stats in
+               printf "Number of LP variables: %d@ " num_lpvars;
+               printf "Number of LP constraints: %d@ " num_lpcons;
+               printf "Maximum focus functions in use: %d@ " max_focus;
+               printf "LP solver time: %.3fs@ " !lp_runtime
+             end;
+           printf "@]@.";
+
+           (* generate Coq proof *)
+           if !dump_coq then
+             begin
+               let generated_proof_name = f_name ^ "_" ^ generated_proof_name in
+               try
+                 Coqgen.dump generated_proof_name f_name (globals, g_funcl) query p AI.print_as_coq ai_results annots
+               with 
+                 Utils.Todo what ->
+                 begin
+                   if Sys.file_exists generated_proof_name then
+                     Sys.remove generated_proof_name;
+                   Format.eprintf "Coq extraction failure (%s)@." what
+                 end
+             end);
+        st_results
     in 
 
     (* if module mode then analyze all functions *)
     if !m_mode then 
       begin
-        let f_retcode = ref 0 in 
-        List.iter 
-          (fun f -> 
+        List.fold_left 
+          (fun _ f -> 
             let fn = f.fun_name in
-            let rc = analyze_fun fn in
-            if rc <> 0 then f_retcode := rc
-          ) g_funcl;
-        !f_retcode
+            analyze_fun fn
+          ) None g_funcl;
       end
     (* else analyze only the main function *) 
     else
       analyze_fun fstart
+    in
+    let best =
+      List.fold_left
+        (fun best (globals, g_funcs, Some cuda) ->
+          Format.fprintf Format.std_formatter "Analyzing:";
+          (* CUDA.print_cprog Format.std_formatter cuda; *)
+          match (analyze_prog (globals, g_funcs), best) with
+          | (None, _) -> None
+          | (Some (annot, p), None) -> Some (p, cuda)
+          | (Some (_, p), Some (best_poly, best_prog)) ->
+             if Polynom.Poly.always_less p best_poly then
+               Some (p, cuda)
+             else
+               best
+        )
+        None
+        progs_to_analyze
+    in
+    match best with
+    | None -> failwith "impossible"
+    | Some (_, cuda) ->
+       (match !output_opt with
+        | None -> 0
+        | Some file ->
+           let outc = open_out file in
+           let fmt = Format.formatter_of_out_channel outc in
+           let fmtt = Format.make_formatter (fun _ _ _ -> ()) (fun _ -> ()) in
+           CUDA.print_cprog fmtt cuda;
+           close_out outc;
+           0)
+    | _ -> failwith "impossible"
   in
-
   if !eval then
     if ends_with ".cu" !input_file then
       match Frontc.parse_file !input_file stdout with
       | Frontc.PARSING_ERROR -> failwith "parse error"
       | Frontc.PARSING_OK ccode ->
-         let cuda = CUDA.cuda_of_file !input_file ccode in
+         let cuda = CUDA.cuda_of_file (fun () -> ()) !input_file ccode in
          let (p, varmap, heap) =
            match !param_file with
            | Some s -> CUDA_Params.params_of_file s

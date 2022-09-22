@@ -13,13 +13,13 @@ let p_none = { pos_file = "";
                pos_char = 0 }
 
 let rec sub_expr dict e =
-  match e with
+  match desc e with
   | EVar v ->
      (try IdMap.find v dict
       with Not_found -> e)
-  | EAdd (e1, e2) -> EAdd (sub_expr dict e1, sub_expr dict e2)
-  | ESub (e1, e2) -> ESub (sub_expr dict e1, sub_expr dict e2)
-  | EMul (e1, e2) -> EMul (sub_expr dict e1, sub_expr dict e2)
+  | EAdd (e1, e2) -> mk (ann e) (EAdd (sub_expr dict e1, sub_expr dict e2))
+  | ESub (e1, e2) -> mk (ann e) (ESub (sub_expr dict e1, sub_expr dict e2))
+  | EMul (e1, e2) -> mk (ann e) (EMul (sub_expr dict e1, sub_expr dict e2))
   | _ -> e
 
 let rec sub_logic dict l =
@@ -74,12 +74,12 @@ let rec simpl_instr (dict, cost, is) ip =
   | ITick n -> (dict, cost + n, is)
   | ITickMemReads (id, bits, host, read) ->
      (match IdMap.find_opt id dict with
-      | Some (EVar id') ->
+      | Some (_, EVar id') ->
          (dict, cost, (ITickMemReads (id', bits, host, read), p)::is)
       | _ -> (dict, cost, ip::is))
   | ITickConflicts (id, bits, read) ->
      (match IdMap.find_opt id dict with
-      | Some (EVar id') ->
+      | Some (_, EVar id') ->
          (dict, cost, (ITickConflicts (id', bits, read), p)::is)
       | _ -> (dict, cost, ip::is))
 and simpl_block dict b =
@@ -91,7 +91,7 @@ and simpl_block dict b =
   }
 
 let rec used_vars_expr e =
-  match e with
+  match desc e with
   | EVar id -> IdSet.singleton id
   | EAdd (e1, e2)
     | ESub (e1, e2)

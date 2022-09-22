@@ -7,9 +7,9 @@ type csjump =
 
 type csinstruction =
   | CSITick of int
-  | CSIAssert of Types.logic                                    (* at the begining of a block, used for the block guards *)
-  | CSIAssume of Types.logic                                    (* used for assumptions *)
-  | CSIAssign of Types.id * Types.expr
+  | CSIAssert of unit Types.logic                                    (* at the begining of a block, used for the block guards *)
+  | CSIAssume of unit Types.logic                                    (* used for assumptions *)
+  | CSIAssign of Types.id * unit Types.expr
   | CSICall of Types.id                                         (* no return and arguments, use global variables instead *)
   | CSICallArg of Types.id list * Types.id * Types.id list      (* function call with arguments and return variables *)
   | CSProbIf of Types.prob_expr                                 (* probability = (a,b), used for probabilistic branching *)

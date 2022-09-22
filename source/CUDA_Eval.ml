@@ -163,7 +163,7 @@ let rec eval_clval params m vctx lm heap read (threads: dim3 list) lv thr_ref
 
 and eval_cexpr params m vctx lm heap (threads: dim3 list) e :
       const option list * cost =
-  match e with
+  match desc e with
   | CL lv ->
      eval_clval params m vctx lm heap true threads (collapse_arrays lv) false
   | CConst c -> (List.map (fun _ -> Some c) threads, m KConst)
@@ -274,7 +274,7 @@ and eval_clogic params m vctx lm heap threads l : bool list * cost =
      let (b, cost) = eval_clogic params m vctx lm heap threads l in
      (List.map (not) b, cost ++ (m (KUnop UNot)))
 
-and eval_cinstr params m vctx lm heap cost (stack: (dim3 list * cinstr list) list)
+and eval_cinstr params m vctx lm heap cost (stack: (dim3 list * 'a cinstr list) list)
     : const option list option * cost =
   (* let _ = Printf.printf "cost: %d\n" cost in *)
   match stack with
@@ -329,17 +329,17 @@ and eval_cinstr params m vctx lm heap cost (stack: (dim3 list * cinstr list) lis
          cond
          ts
      in
-     (match (tthreads, fthreads, b1, b2) with
+     (match (tthreads, fthreads, insts b1, insts b2) with
       | ([], _, _, x::t) -> eval_cinstr params m vctx lm heap
                               (cost ++ ccost ++ (m KIf) ++ (m KElse))
-                              ((ts, b2)::(ts, r)::s)
+                              ((ts, insts b2)::(ts, r)::s)
       | ([], _, _, [])
         | (_, [], [], _) -> eval_cinstr params m vctx lm heap
                               (cost ++ ccost ++ (m KIf))
                               ((ts, r)::s)
       | (_, [], x::t, _) -> eval_cinstr params m vctx lm heap
                               (cost ++ ccost ++ (m KIf) ++ (m KThen))
-                              ((ts, b1)::(ts, r)::s)
+                              ((ts, insts b1)::(ts, r)::s)
                               (* Uncomment if not charging for skips
       | (tt, ft, [], _) -> eval_cinstr params m vctx lm
                              (cost ++ ccost + (m KIf) + (m KElse))
@@ -351,23 +351,23 @@ and eval_cinstr params m vctx lm heap cost (stack: (dim3 list * cinstr list) lis
       | (tt, ft, _, _) ->
          eval_cinstr params m vctx lm heap
            (cost ++ ccost ++ (m KDivWarp) ++ (m KIf) ++ (m KElse) ++ (m KThen))
-           ((tt, b1)::(ft, b2)::(ts, r)::s)
+           ((tt, insts b1)::(ft, insts b2)::(ts, r)::s)
      )
-  | (ts, (CWhile (l, b))::r)::s ->
+  | (ts, (CWhile (l, (a, b)))::r)::s ->
      ((*Printf.printf "while with %d threads\n" (List.length ts);*)
      eval_cinstr params m vctx lm heap cost
-       ((ts, (CIf (l, b @ [CWhile (l, b)], []))::r)::s))
-  | (ts, (CFor (b1, l, b2, b3))::r)::s ->
+       ((ts, (CIf (l, (a, b @ [CWhile (l, (a, b))]), (a, [])))::r)::s))
+  | (ts, (CFor (b1, l, b2, (a, b3)))::r)::s ->
      eval_cinstr params m vctx lm heap cost
-       ((ts, b1 @ [CWhile (l, b3 @ b2)] @ r)::s)
+       ((ts, b1 @ [CWhile (l, (a, b3 @ b2))] @ r)::s)
   | (ts, (CReturn e)::r)::_ ->
      let (es, c) = eval_cexpr params m vctx lm heap ts e in
      (Some es, c ++ cost ++ (m KReturn))
 
-let eval_cfunc params lm h m threads (_, ids, b, _) =
+let eval_cfunc params lm h m threads (_, _, ids, b, _) =
   let vctx = List.fold_left
                (fun vctx (v, t) -> add_var vctx v (Global, params.sizeof t, []))
                M.empty
                ids
   in
-  eval_cinstr params m vctx lm h 0 [(threads, b)]
+  eval_cinstr params m vctx lm h 0 [(threads, insts b)]
