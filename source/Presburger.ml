@@ -27,6 +27,8 @@ module L = struct
   let coeff id {m;_} =
     try find id m with Not_found -> 0
 
+  let get_const {m; k} = k
+
   let set x c {m;k} =
     {m = if c = 0 then remove x m else add x c m; k}
 
@@ -47,6 +49,9 @@ module L = struct
       let o = c * h a + h b in
       if o = 0 then None else Some o in
     {m = merge f m1 m2; k = c * k1 + k2}
+
+  let fold_vars f b {m; _} =
+    fold f m b
 
   let print fmt {m; k} =
     let open Format in
@@ -74,6 +79,16 @@ module L = struct
         (sign first k) (abs k)
     else if first then
       fprintf fmt "0"
+
+  let toCUDA {m; k} =
+    let open CUDA_Types in
+    let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
+    let cmul (e1, e2) = emk () (CMul (e1, e2)) in
+    let cconst e = emk () (CConst e) in
+    let cl e = emk () (CL e) in
+    fold (fun x c e -> cadd (e, cmul (cl (CVar x), cconst (CInt c))))
+      m
+      (cconst (CInt k))
 
   let print_as_coq varname fmt {m; k} =
     let open Format in

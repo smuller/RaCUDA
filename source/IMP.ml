@@ -222,7 +222,10 @@ let multiple_call_transformation func_l =
  * func_l : list of function
  * we do the transformation based on depth-first-search (DFS) of the call graph
  *)
-let function_call_transformation globals func_l = 
+type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
+let function_call_transformation (da: unit -> 'annot) globals
+      (func_l : ('a, 'annot block) Types.func_ list)
+    : 'c * ('a, 'annot block) Types.func_ list = 
 
 
   let h_regs = Hashtbl.create 9 in
@@ -259,15 +262,27 @@ let function_call_transformation globals func_l =
       for i = 0 to ((List.length args) - 1) do
         try 
           let reg = Hashtbl.find h_regs i in
-          let _ = CUDA.add_var_exp reg (EVar (List.nth args i)) in
-          let assign_reg = (IAssign (reg, EVar (List.nth args i)), pos) in 
-          ins_l := assign_reg :: !ins_l
+          let param_keeper = "__param" ^ (List.nth args i) in
+          let _ = CUDA.add_var_exp reg (mk () (EVar (List.nth args i))) in
+          let assign_reg = (IAssign (reg, mk (da ()) (EVar (List.nth args i))),
+                            pos) in
+          let assign_param = (IAssign (param_keeper,
+                                       mk (da ()) (EVar (List.nth args i))),
+                              pos)
+          in
+          ins_l := assign_reg :: assign_param :: !ins_l
         with 
         | Not_found ->
            let reg = new_reg () in
-           let _ = CUDA.add_var_exp reg (EVar (List.nth args i)) in
-          let assign_reg = (IAssign (reg, EVar (List.nth args i)), pos) in 
-          ins_l := assign_reg :: !ins_l
+           let param_keeper = "__param" ^ (List.nth args i) in
+           let _ = CUDA.add_var_exp reg (mk () (EVar (List.nth args i))) in
+           let assign_reg = (IAssign (reg, mk (da ()) (EVar (List.nth args i))),
+                             pos) in 
+           let assign_param = (IAssign (param_keeper,
+                                        mk (da ()) (EVar (List.nth args i))),
+                               pos)
+           in
+           ins_l := assign_reg :: !ins_l
       done;
       
       (* add a call without arguments and returns *)
@@ -276,12 +291,14 @@ let function_call_transformation globals func_l =
       for j = 0 to ((List.length rets) - 1) do 
         try
           let ret = Hashtbl.find h_rets j in 
-          let assign_ret = (IAssign ((List.nth rets j), (EVar ret)), pos) in 
+          let assign_ret = (IAssign ((List.nth rets j),
+                                     (mk (da ()) (EVar ret))), pos) in 
           ins_l := assign_ret :: !ins_l
         with
         | Not_found -> 
           let ret = new_ret () in
-          let assign_ret = (IAssign ((List.nth rets j), (EVar ret)), pos) in 
+          let assign_ret = (IAssign ((List.nth rets j),
+                                     (mk (da ()) (EVar ret))), pos) in 
           ins_l := assign_ret :: !ins_l
       done;
       List.rev !ins_l
@@ -336,14 +353,16 @@ let function_call_transformation globals func_l =
       for i = 0 to ((List.length args) - 1) do
         try 
           let reg = Hashtbl.find h_regs i in
-          let _ = CUDA.add_var_exp reg (EVar (List.nth args i)) in
-          let assign_arg = (IAssign ((List.nth args i), EVar reg), pos) in 
+          let _ = CUDA.add_var_exp reg (mk () (EVar (List.nth args i))) in
+          let assign_arg = (IAssign ((List.nth args i), mk (da ()) (EVar reg)),
+                            pos) in 
           ins_l := assign_arg :: !ins_l
         with 
         | Not_found ->
            let reg = new_reg () in
-           let _ = CUDA.add_var_exp reg (EVar (List.nth args i)) in
-          let assign_arg = (IAssign ((List.nth args i), EVar reg), pos) in 
+           let _ = CUDA.add_var_exp reg (mk () (EVar (List.nth args i))) in
+           let assign_arg = (IAssign ((List.nth args i), mk (da ()) (EVar reg)),
+                             pos) in 
           ins_l := assign_arg :: !ins_l
       done;
       List.rev !ins_l
@@ -354,12 +373,14 @@ let function_call_transformation globals func_l =
       for i = 0 to ((List.length ret_l) - 1) do
         try 
           let ret = Hashtbl.find h_rets i in
-          let assign_ret = (IAssign (ret, EVar (List.nth ret_l i)), pos) in 
+          let assign_ret = (IAssign (ret, mk (da ()) (EVar (List.nth ret_l i))),
+                            pos) in 
           ins_l := assign_ret :: !ins_l
         with 
         | Not_found ->
           let ret = new_reg () in
-          let assign_ret = (IAssign (ret, EVar (List.nth ret_l i)), pos) in 
+          let assign_ret = (IAssign (ret, mk (da ()) (EVar (List.nth ret_l i))),
+                            pos) in 
           ins_l := assign_ret :: !ins_l
       done;
       List.rev !ins_l
@@ -435,10 +456,10 @@ let function_call_transformation globals func_l =
   
   new_globals, new_func_l
   
-let written_instr (i: instr) : id list =
+let written_instr (i: 'a instr) : id list =
   match i with
   | IAssign (id, _) -> [id]
   | _ -> []
 
-let written_block (b: block) : id list =
+let written_block (b: 'a block) : id list =
   List.flatten (List.map (fun (i, _) -> written_instr i) b.b_body)

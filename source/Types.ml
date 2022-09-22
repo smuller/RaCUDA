@@ -26,13 +26,13 @@ type position =
   ; pos_char: int
   }
 
-type expr =
+type 'a expr_ =
   | ERandom
   | EVar of id
   | ENum of int
-  | EAdd of expr * expr
-  | ESub of expr * expr
-  | EMul of expr * expr
+  | EAdd of 'a expr * 'a expr
+  | ESub of 'a expr * 'a expr
+  | EMul of 'a expr * 'a expr
   | EBer of int * int
   | EBin of int * int * int
   | EGeo of int * int
@@ -42,12 +42,18 @@ type expr =
   | EUnif of int * int
   | EDist of id * int * int * int * int
 
+and 'a expr = 'a * 'a expr_
+
+let desc (a, e) = e
+let ann (a, e) = a
+let mk (a: 'a) (e: 'a expr_) : 'a expr = (a, e)
+            
 type prob_expr =
   | EProb of int * int
 
-type free_expr =
-  | FBase of expr
-  | FApply of id * free_expr list * position
+type 'a free_expr =
+  | FBase of 'a expr
+  | FApply of id * 'a free_expr list * position
 
 type ('a, 'b) func_ =
   { fun_name: id
@@ -61,11 +67,31 @@ type ('a, 'b) func_ =
 
 type cmp = Le | Lt | Ge | Gt | Eq | Ne
 
-type logic =
+type 'a logic =
   | LTrue
   | LFalse
   | LRandom
-  | LCmp of expr * cmp * expr
-  | LAnd of logic * logic
-  | LOr of logic * logic
-  | LNot of logic
+  | LCmp of 'a expr * cmp * 'a expr
+  | LAnd of 'a logic * 'a logic
+  | LOr of 'a logic * 'a logic
+  | LNot of 'a logic
+
+let rec erase_e e =
+  mk ()
+    (match desc e with
+     | EVar x -> EVar x
+     | ENum n -> ENum n
+     | EAdd (e1, e2) -> EAdd (erase_e e1, erase_e e2)
+     | ESub (e1, e2) -> ESub (erase_e e1, erase_e e2)
+     | EMul (e1, e2) -> EMul (erase_e e1, erase_e e2)
+    )
+
+let rec erase_l l =
+  match l with
+  | LTrue -> LTrue
+  | LFalse -> LFalse
+  | LRandom  -> LRandom
+  | LCmp (e1, c, e2) -> LCmp (erase_e e1, c, erase_e e2)
+  | LAnd (l1, l2) -> LAnd (erase_l l1, erase_l l2)
+  | LOr (l1, l2) -> LOr (erase_l l1, erase_l l2)
+  | LNot l -> LNot (erase_l l)

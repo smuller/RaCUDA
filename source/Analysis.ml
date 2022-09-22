@@ -72,7 +72,7 @@ module Potential
   val dump: Format.formatter -> annot -> unit
   val of_poly: Poly.t -> annot
   val monoms: annot -> Monom.t list
-  val exec_assignment: (id * expr * bool) -> annot -> annot
+  val exec_assignment: (id * 'a expr * bool) -> annot -> annot
   val constrain: annot -> order -> annot -> unit
   val weaken: Poly.t list -> annot -> (annot * focus_annot list)
   val split: IdSet.t -> annot -> ((* local *) annot * (* global *) annot)
@@ -222,12 +222,12 @@ end
           add_poly le (monom_subst v e monom)
           end annot M.empty
       in
-      match e with
+      match desc e with
       | ERandom ->
          let fresh = Utils.fresh_name () in
          let e = Poly.of_monom (Monom.of_var fresh) 1. in
          subst e
-      | e -> subst (Poly.of_expr e)
+      | _ -> subst (Poly.of_expr e)
     else annot
 
   (* add a constraint sum(kv_i * v_i) o k *)
@@ -661,7 +661,8 @@ let run ai_results ai_is_bot ai_is_nonneg (gl, fl) start degree analysis_type qu
                   a)
               (* failwith ("should have been filled in - " ^ v') *)
               | Some n ->
-                 Potential.exec_assignment (v, EAdd (ENum n, EVar v), true) a)
+                 Potential.exec_assignment
+                   (v, mk () (EAdd (mk () (ENum n), mk () (EVar v))), true) a)
           | Graph.ACall f' ->
             let (la, ga) = Potential.split gs a in
             let ga1 = Potential.new_annot global_monoms in

@@ -49,13 +49,19 @@ module DM = Map.Make (struct type t = dim option
 type 'a ob = Bot
            | V of 'a
 
+let args : Types.id list ref = ref []
+
+let glob_allow_extend  = ref false
+                
 let known_temps : int M.t ref = ref M.empty
-let waiting_temps : (expr ref list) M.t ref = ref M.empty
+(* let waiting_temps : (expr ref list) M.t ref = ref M.empty *)
 
 (* Dependence on thread IDs, possible divergent assignment, uniform *)
 type cuda_dom = Poly.t ob DM.t * bool * bool
 
 let monom_var m =
+  (* Format.fprintf Format.std_formatter "%a\n"
+    (Monom.print ~ascii:false) m; *)
   assert (Monom.degree m = 1);
   match Monom.pick m with
   | (Factor.Var v, _) -> v
@@ -78,21 +84,21 @@ module Translate = struct
     DNF.lift (linear_of_poly p)
 
   let dnf_of_logic l =
-    let one = ENum 1 in
+    let one = mk () (ENum 1) in
     let cmp e1 c e2 =
       match c with
-      | Le -> linear_of_expr (ESub (e1, e2))
-      | Lt -> linear_of_expr (ESub (EAdd (one, e1), e2))
-      | Ge -> linear_of_expr (ESub (e2, e1))
-      | Gt -> linear_of_expr (ESub (EAdd (one, e2), e1))
+      | Le -> linear_of_expr (mk () (ESub (e1, e2)))
+      | Lt -> linear_of_expr (mk () (ESub (mk () (EAdd (one, e1)), e2)))
+      | Ge -> linear_of_expr (mk () (ESub (e2, e1)))
+      | Gt -> linear_of_expr (mk () (ESub (mk () (EAdd (one, e2)), e1)))
       | Eq ->
         DNF.conjunct
-          (linear_of_expr (ESub (e1, e2)))
-          (linear_of_expr (ESub (e2, e1)))
+          (linear_of_expr (mk () (ESub (e1, e2))))
+          (linear_of_expr (mk () (ESub (e2, e1))))
       | Ne ->
         DNF.disjunct
-          (linear_of_expr (ESub (EAdd (one, e1), e2)))
-          (linear_of_expr (ESub (EAdd (one, e2), e1)))
+          (linear_of_expr (mk () (ESub (mk () (EAdd (one, e1)), e2))))
+          (linear_of_expr (mk () (ESub (mk () (EAdd (one, e2)), e1))))
     in
     DNF.of_logic cmp l
 
@@ -101,15 +107,15 @@ end
 type transfer =
   | TNone
   | TWeaken
-  | TGuard of L.sum DNF.t * logic
-  | TAssign of id * Poly.t option * expr ref * bool ref
+  | TGuard of L.sum DNF.t * ulogic
+  | TAssign of id * Poly.t option * uexpr ref * bool ref
   | TAddMemReads of id * id * int option ref * int * bool * bool
   | TAddConflicts of id * id * int option ref * int * bool
   | TCall of func * func
   | TReturn of func * func
   | TProb of float
-  | TUnique of logic ref
-  | TNotUnique of logic ref
+  | TUnique of ulogic ref
+  | TNotUnique of ulogic ref
   | TCallUninterp of id * string * id list (* x = f(x1, ..., xn) *)
   | TUnify
   | TSwitch of id list
@@ -187,7 +193,7 @@ module HyperGraph = struct
               (TNotUnique lr) ~pred:[|src|] ~succ:[|dst|];
           | AAssign (id, e, br) ->
             let peo =
-              match !e with
+              match desc !e with
               | ERandom -> None
               | _ -> Some (Poly.of_expr !e)
             in
@@ -265,8 +271,8 @@ let cuda_join id (p1, da1, u1) (p2, da2, u2) =
     match (DM.find_opt None p1, DM.find_opt None p2) with
     | (Some (V p1), Some (V p2)) ->
        if Poly.compare p1 p2 = 0 then cuda_unif_of (u1 && u2) p1
-       else cuda_unif_of (u1 && u2) (Poly.of_expr (EVar id))
-    | _ -> cuda_unif_of (u1 && u2) (Poly.of_expr (EVar id))
+       else cuda_unif_of (u1 && u2) (Poly.of_expr (mk () (EVar id)))
+    | _ -> cuda_unif_of (u1 && u2) (Poly.of_expr (mk () (EVar id)))
   else
   (DM.merge (fun p a b ->
        match (a, b) with
@@ -288,7 +294,7 @@ let cuda_bot = (DM.add (Some X) Bot
 
 let get_cd m id =
   try M.find id m
-  with Not_found -> cuda_unif_of true (Poly.of_expr (EVar id))
+  with Not_found -> cuda_unif_of true (Poly.of_expr (mk () (EVar id)))
 
 let print_cuda fmt (m, _, _) =
   let print_dim first fmt d =
@@ -321,18 +327,22 @@ let cuda_init = List.fold_left (fun m (id, v) -> M.add id v m) M.empty
                     (CUDA_Config.tidy_var, cuda_of_var Y);
                     (CUDA_Config.tidz_var, cuda_of_var Z)]
 
-(* Presburger constraints, CUDA domain, possibly divergent *)
-type absval = (Presburger.L.sum list) * (cuda_dom M.t) * bool
-let bottom = (Presburger.bottom, cuda_init, false)
-let is_bottom (p, _, _) =
+(* Presburger constraints, Extended Presburger constraints,
+CUDA domain, possibly divergent *)
+type absval = (Presburger.L.sum list) * (Presburger.L.sum list) *
+                (cuda_dom M.t) * bool
+let bottom = (Presburger.bottom, Presburger.bottom, cuda_init, false)
+let is_bottom (_, p, _, _) =
   (not (Presburger.sat p))(*  && (s = None) && (m = None)*)
-let is_leq (p1, m1, d1) (p2, m2, d2) =
-    (List.for_all (Presburger.implies p1) p2) &&
+let is_leq (p1, p1e, m1, d1) (p2, p2e, m2, d2) =
+  (List.for_all (Presburger.implies p1) p2) &&
+    (List.for_all (Presburger.implies p1e) p2e) &&
       (M.for_all (fun id cd -> cuda_leq cd (get_cd m2 id)) m1) &&
         ((not d1) || d2)
 
-let join (p1, m1, dv1) (p2, m2, dv2) =
+let join (p1, p1e, m1, dv1) (p2, p2e, m2, dv2) =
   (Presburger.join p1 p2,
+   Presburger.join p1e p2e,
    M.merge (fun id d1 d2 ->
        let d1 = match d1 with Some x -> x | None -> cuda_bot in
        let d2 = match d2 with Some x -> x | None -> cuda_bot in
@@ -341,8 +351,8 @@ let join (p1, m1, dv1) (p2, m2, dv2) =
   dv1 || dv2)
 
 let join_list = List.fold_left join bottom
-let top = ([], M.empty, true)
-let print fmt (p, m, _) =
+let top = ([], [], M.empty, true)
+let print fmt (p, _, m, _) =
   let open Format in
   (fprintf fmt "%a" Presburger.print p;
    (Print.list ~sep:" &&@ "
@@ -352,12 +362,165 @@ let print fmt (p, m, _) =
      (M.bindings m))
   )
 
+let bd_to_CUDA neg (k, l) =
+  let open CUDA_Types in
+  let k = if neg then ~-k else k in
+  if k = 1 then
+    Presburger.L.toCUDA l
+  else if k = ~-1 then
+    emk () (CMul (Presburger.L.toCUDA l, emk () (CConst (CInt ~-1))))
+  else
+    emk () (CDiv (Presburger.L.toCUDA l, emk () (CConst (CInt k))))
+    
+  let is_nonneg (abs, _, _, _) pol =
+  if Poly.degree pol > 1 then false else
+  let l = L.mult (-1) (Translate.linear_of_poly pol) in
+  List.exists (L.eq l) abs || Presburger.implies abs l
+
+  
 module Solver = struct
 
   (* Here we use the fixpoint library to find an
      abstract state for each vertex of the hypergraph.
-  *)
+   *)
 
+  let is_param id =
+    let b = List.mem id CUDA_Config.cuda_vars ||
+              (String.length id > 7 && String.sub id 0 7 = "__param") ||
+                (String.length id > 5 && String.sub id 0 5 = "_reg_")
+    in
+    b
+    
+
+  let is_nonneg_lb (k, l) =
+    k > 0 && (L.get_const l >= 0)
+    && L.fold_vars (fun v c p -> p && is_param v && c >= 0) true l
+
+  let is_nonneg_lbs lbs =
+    List.exists is_nonneg_lb lbs
+(* Old
+let bounds abs pe =
+    Poly.fold begin fun m k (lbs, ubs) ->
+      let k = int_of_float k in
+      let addk k (k', l) = (k', L.addk (k*k') l) in
+      if Monom.is_one m then
+        (List.map (addk (+k)) lbs, List.map (addk (-k)) ubs)
+      else
+        let v = monom_var m in
+        let c_comp f l = f (L.coeff v l) 0 in
+        let ubs' = List.filter (c_comp (>)) abs in
+        let lbs' = List.filter (c_comp (<)) abs in
+        let ubs', lbs', k =
+          if k < 0 then (lbs', ubs', -k) else (ubs', lbs', +k)
+        in
+        let addscale l (k', l') =
+          let vk = Pervasives.abs (L.coeff v l) in
+          let l = L.mult k l in
+          let lcm = Presburger.lcm vk k' in
+          let l = L.plus (lcm/vk) l (L.mult (lcm/k') l') in
+          (lcm, L.set v 0 l)
+        in
+        let merge a a' =
+          List.concat
+            (List.map (fun l -> List.map (addscale l) a) a')
+        in
+        (merge lbs lbs', merge ubs ubs')
+      end pe ([(1, L.const 0)], [(1, L.const 0)])
+ *)
+  let bounds ?(allow_params = false) abs pe =
+    Poly.fold begin fun m k (lbs, ubs) ->
+      let k = int_of_float k in
+      let addk k (k', l) = (k', L.addk (k*k') l) in
+      let addv id n (k, l) = (k, L.addl id n l) in
+      if Monom.is_one m then
+        (List.map (addk (+k)) lbs, List.map (addk (-k)) ubs)
+      else
+        (* if Monom.degree m > 1 then ([], [])
+        else *)
+        let v = monom_var m in
+        if is_param v && allow_params && !glob_allow_extend then
+           (List.map (addv v 1) lbs, List.map (addv v (-1)) ubs)
+        else
+            let c_comp f l = f (L.coeff v l) 0 in
+            let ubs' = List.filter (c_comp (>)) abs in
+            let lbs' = List.filter (c_comp (<)) abs in
+            let ubs', lbs', k =
+              if k < 0 then (lbs', ubs', -k) else (ubs', lbs', +k)
+            in
+            let addscale l (k', l') =
+              let vk = Pervasives.abs (L.coeff v l) in
+              let l = L.mult k l in
+              let lcm = Presburger.lcm vk k' in
+              let l = L.plus (lcm/vk) l (L.mult (lcm/k') l') in
+              (lcm, L.set v 0 l)
+            in
+            let merge a a' =
+              List.concat
+                (List.map (fun l -> List.map (addscale l) a) a')
+            in
+            (merge lbs lbs', merge ubs ubs')
+      end pe ([(1, L.const 0)], [(1, L.const 0)])
+
+  let factor_var f =
+    match f with
+    | Factor.Var v -> v
+    | _ -> failwith "factor not a var"
+    
+  let bounds_gen abs pe =
+    let open CUDA_Types in
+    let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
+    let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
+    let cconst e = emk () (CConst e) in
+    Poly.fold (fun m k ->
+        function
+          None -> None
+        | Some (lb, ub) ->
+           (match
+           Monom.fold (fun f e ->
+               function
+                 None -> None
+               | Some (lb, ub) ->
+                  if Factor.degree f = 1 && e = 1 && is_param (factor_var f)
+                  then
+                    let v = factor_var f in
+                    let _ = Printf.printf "Using %s\n" v in
+                    Some (emk () (CL (CVar v)), emk () (CL (CVar v)))
+                  else
+                    (Format.fprintf Format.std_formatter "Finding bounds for %a\n"
+                       Factor.print f;
+                      match bounds abs
+                           (Poly.of_monom (Monom.of_factor f e) 1.0)
+                   with
+                   | (lb'::olbs, ub'::_) ->
+                      if is_nonneg_lbs (lb'::olbs)
+                         || e mod 2 = 0 then
+                        let (clb, cub) = (bd_to_CUDA false lb',
+                                          bd_to_CUDA true ub')
+                        in
+                        let _ = Format.fprintf Format.std_formatter
+                                  "lb: %a\nub: %a\n"
+                                  CUDA.print_cexpr clb
+                                  CUDA.print_cexpr cub
+                        in
+                        Some (emk () (CMul (lb, clb)), emk () (CMul (ub, cub)))
+                      else
+                        (Format.fprintf Format.std_formatter "Negative lb\n"; None)
+                   | _ ->
+                      (Format.fprintf Format.std_formatter "No bounds\n"; None))
+             )
+             m
+             (Some (cconst (CInt 1), cconst (CInt 1)))
+           with
+           | None -> None
+           | Some (lb', ub') ->
+              Some (cadd (lb, cmul (cconst (CFloat k), lb')),
+                    cadd (ub, cmul (cconst (CFloat k), ub')))
+           )
+      )
+      pe
+      (Some (cconst (CInt 1), cconst (CInt 1)))
+             
+                        
   let make_fpmanager graph widening apply =
     let info = PSHGraph.info graph in
     let dont_print _ _ = () in
@@ -370,7 +533,7 @@ module Solver = struct
     ; odiff = None
     ; widening = (fun _ -> widening)
     ; abstract_init =
-        (fun _ -> ([], cuda_init, false))
+        (fun _ -> ([], [], cuda_init, false))
     ; arc_init = (fun _ -> ())
     ; apply = apply graph
     ; print_vertex = HyperGraph.print_vertex info
@@ -398,35 +561,9 @@ module Solver = struct
      the abstract state.
    *)
 
-  let bounds abs pe =
-    Poly.fold begin fun m k (lbs, ubs) ->
-      let k = int_of_float k in
-      let addk k (k', l) = (k', L.addk (k*k') l) in
-      if Monom.is_one m then
-        (List.map (addk (+k)) lbs, List.map (addk (-k)) ubs)
-      else
-        let v = monom_var m in
-        let c_comp f l = f (L.coeff v l) 0 in
-        let ubs' = List.filter (c_comp (>)) abs in
-        let lbs' = List.filter (c_comp (<)) abs in
-        let ubs', lbs', k =
-          if k < 0 then (lbs', ubs', -k) else (ubs', lbs', +k)
-        in
-        let addscale l (k', l') =
-          let vk = Pervasives.abs (L.coeff v l) in
-          let l = L.mult k l in
-          let lcm = Presburger.lcm vk k' in
-          let l = L.plus (lcm/vk) l (L.mult (lcm/k') l') in
-          (lcm, L.set v 0 l)
-        in
-        let merge a a' =
-          List.concat
-            (List.map (fun l -> List.map (addscale l) a) a')
-        in
-        (merge lbs lbs', merge ubs ubs')
-      end pe ([(1, L.const 0)], [(1, L.const 0)])
+  (* Bounds was here *)
 
-  let var_is_unique ((abs, m, _) as ab) id =
+  let var_is_unique ((_, abs, m, _) as ab) id =
     let (lbs, ubs) = bounds abs (Poly.of_monom (Monom.of_var id) 1.0) in
     let boundplusone (k, l) =
       L.plus (-1) (L.set id k (L.const 0)) (L.plus 1 (L.const 1) l)
@@ -434,9 +571,9 @@ module Solver = struct
     let pluslbs = List.map boundplusone lbs in
     List.exists (fun lb -> not (Presburger.sat (lb::abs))) pluslbs
 
-  let rec e_is_unique ((abs, m, _) as ab) expr =
+  let rec e_is_unique ((_, abs, m, _) as ab) expr =
     (* let _ = Printf.printf "e_is_unique\n%!" in *)
-    match expr with
+    match desc expr with
     | EVar id ->
        let un = (cuda_is_unif (get_cd m id)) (* || (var_is_unique id) *)
        in
@@ -450,15 +587,15 @@ module Solver = struct
       | EMul (e1, e2) -> (e_is_unique ab e1) && (e_is_unique ab e2)
     | _ -> ((*Printf.printf "not sure\n%!"; *) false)
 
-  let rec e_is_pot ((abs, m, _) as ab) expr =
-    match expr with
+  let rec e_is_pot ((_, abs, m, _) as ab) expr =
+    match desc expr with
     | EVar id -> ctd (get_cd m id)
     | EAdd (e1, e2)
       | ESub (e1, e2)
       | EMul (e1, e2) -> (e_is_pot ab e1) && (e_is_pot ab e2)
     | _ -> true
 
-  let rec is_unique ((abs, m, _) as ab) log =
+  let rec is_unique ((_, abs, m, _) as ab) log =
     match log with
     | LTrue | LFalse -> true
     | LRandom -> false
@@ -466,13 +603,23 @@ module Solver = struct
     | LAnd (l1, l2) | LOr (l1, l2) -> (is_unique ab l1) && (is_unique ab l2)
     | LNot l -> is_unique ab l
 
-  let apply_TGuard ((abs, m, d) as ab) (disj, l) =
+  let apply_TGuard ((abs, abse, m, d) as ab) (disj, l) =
     let abs_and_disj = List.map (Presburger.meet abs) disj in
-    match abs_and_disj with
-    | [] -> bottom
-    | [x] -> (x, m, d || not (is_unique ab l))
-    | x :: disj ->
-       (List.fold_left Presburger.join x disj, m, d || not (is_unique ab l))
+    let abse_and_disj = List.map (Presburger.meet abse) disj in
+    let d' = d || not (is_unique ab l) in
+    let abs' =
+      match abs_and_disj with
+      | [] -> Presburger.bottom
+      | [x] -> x
+      | x :: disj -> List.fold_left Presburger.join x disj
+    in
+    let abse' =
+      match abse_and_disj with
+      | [] -> Presburger.bottom
+      | [x] -> x
+      | x :: disj -> List.fold_left Presburger.join x disj
+    in
+    (abs', abse', m, d')
 
   let apply_TNotUnique abs lr =
     (* let _ = Printf.printf "apply_TNotUnique\n%!" in *)
@@ -563,7 +710,7 @@ module Solver = struct
        da,
        u)
     in
-    match e with
+    match desc e with
     | EVar id -> get_cd m id
     | EAdd (e1, e2) ->
        combine_doms Poly.add
@@ -615,17 +762,17 @@ module Solver = struct
                  true)
     | _ -> cuda_unif
 
-  let apply_TAssign params (abs, m, d) id (peo, e, is_pot) =
-    let _ = match (params, !e) with
-      | (Some (_, metric), EAdd (EVar ov, EVar v)) ->
+  let apply_TAssign params (abs, abse, m, d) id (peo, e, is_pot) =
+    let _ = match (params, desc !e) with
+      | (Some (_, metric), EAdd ((_, EVar ov), (_, EVar v))) ->
          if String.compare v CUDA_Config.div_cost = 0
          then
-           e := EAdd (EVar ov,
-                      ENum (metric CUDA_Cost.KDivWarp))
+           e := mk () (EAdd (mk () (EVar ov),
+                             mk () (ENum (metric CUDA_Cost.KDivWarp))))
          else
            (match M.find_opt v !known_temps with
             | Some n -> ((* Printf.printf "found\n"; *)
-                         e := EAdd (EVar ov, ENum n))
+                         e := mk () (EAdd (mk () (EVar ov), mk () (ENum n))))
             | None -> () (*
                       let l = match M.find_opt v !waiting_temps with
                         | Some l -> l
@@ -638,12 +785,13 @@ module Solver = struct
     let _ =
       is_pot := !is_pot ||
                   ((ctd (get_cd m id))
-                   && (e_is_unique (abs, m, d) (!e))
-                   && (e_is_pot (abs, m, d) (!e)))
+                   && (e_is_unique (abs, abse, m, d) (!e))
+                   && (e_is_pot (abs, abse, m, d) (!e)))
     in
     let forget_id abs =
       List.filter (fun l -> L.coeff id l = 0) abs in
-    ((if peo = None then forget_id abs else
+    let update_abs ext abs =
+      if peo = None then forget_id abs else
     let pe = match peo with Some x -> x | _ -> assert false in
 
     (* Linear assignment, we consider two cases:
@@ -684,8 +832,30 @@ module Solver = struct
       else
         (* Case 2. *)
         let abs = forget_id abs in
-        let lbs, ubs = bounds abs pe
+        let lbs, ubs = bounds ~allow_params:ext abs pe
         in
+        (*
+        let _ = Format.fprintf Format.std_formatter "pe: %a (%d, %d)\n"
+                  Poly.print pe
+                  (List.length lbs)
+                  (List.length ubs)
+        in
+         *)
+        (*
+        let _ = (Format.fprintf Format.std_formatter "lbs: ";
+                 (match bound_to_CUDA false lbs with
+                  | Some e -> CUDA.print_cexpr Format.std_formatter e
+                  | None -> ())
+                 ;
+                   Format.print_newline ())
+        in
+        let _ = (Format.fprintf Format.std_formatter "ubs: ";
+                 (match bound_to_CUDA true ubs with
+                  | Some e -> CUDA.print_cexpr Format.std_formatter e
+                  | None -> ());
+                 Format.print_newline ())
+        in
+         *)
         let bound low (k, l) =
           let coeff = if low then (-1) else (+1) in
           L.plus coeff (L.set id k (L.const 0)) l
@@ -703,11 +873,14 @@ module Solver = struct
        by constants and aggregate the bounds.
     *)
     else
-      forget_id abs)
-    , (let (dm, da, u) = dom_of_expr m (!e) in
+      forget_id abs
+    in
+    (update_abs false abs,
+     update_abs true abse,
+     (let (dm, da, u) = dom_of_expr m (!e) in
        (* let (_, _, u) = get_cd m id in *)
-       M.add id (dm, da || d, u) m)
-    , d)
+       M.add id (dm, da || d, u) m),
+    d)
 
   (*
   let apply_TAssign abs id peo =
@@ -717,13 +890,19 @@ module Solver = struct
     res
   *)
 
-  let apply_TCall gs (abs, _, d) =
-    (List.filter (fun s -> S.subset (L.vars S.empty s) gs) abs, cuda_init, d)
+  let apply_TCall gs (abs, abse, _, d) =
+    (List.filter (fun s -> S.subset (L.vars S.empty s) gs) abs,
+     List.filter (fun s -> S.subset (L.vars S.empty s) gs) abse,
+     cuda_init, d)
 
-  let apply_TReturn gs (abs_caller, _, d1) (abs_callee, _, d2) caller =
-    (let ls = List.fold_left (fun ls v -> S.add v ls) S.empty caller.fun_vars in
-     List.filter (fun s -> S.subset (L.vars S.empty s) gs) abs_callee @
+  let apply_TReturn gs (abs_caller, abse_caller, _, d1)
+        (abs_callee, abse_callee, _, d2) caller =
+    let ls = List.fold_left (fun ls v -> S.add v ls) S.empty caller.fun_vars in
+    (List.filter (fun s -> S.subset (L.vars S.empty s) gs) abs_callee @
        List.filter (fun s -> S.subset (L.vars S.empty s) ls) abs_caller
+     ,
+       List.filter (fun s -> S.subset (L.vars S.empty s) gs) abse_callee @
+         List.filter (fun s -> S.subset (L.vars S.empty s) ls) abse_caller
      , cuda_init
      , d1 || d2
    )
@@ -820,7 +999,7 @@ module Solver = struct
       | None -> vz
       | Some u -> min vz u))
 
-  let apply_MemReads params (p, m, dv) ido idi ph type_size host read =
+  let apply_MemReads params (p, pext, m, dv) ido idi ph type_size host read =
     let (params, metric) = match params with
       | Some x -> x
       | None -> failwith "Can't do CUDA analysis without parameters"
@@ -963,7 +1142,7 @@ module Solver = struct
     in*)
     (* let _ = Printf.printf "filling in %s\n" idi in *)
     let _ = ph := Some b in
-    (p, m, dv)
+    (p, pext, m, dv)
   (* ((L.set ido (1) (L.const (-b)))::p, m) *)
 
   let mult_of_tid params p =
@@ -999,7 +1178,7 @@ module Solver = struct
       Some cx
     with Not_found -> None
 
-  let apply_BankConflicts params (p, m, dv) ido idi ph size read =
+  let apply_BankConflicts params (p, pext, m, dv) ido idi ph size read =
     (*let p' = match s with
       | Some s -> (fixParams s) @ p
       | None -> p
@@ -1010,14 +1189,14 @@ module Solver = struct
       | None -> failwith "Can't do CUDA analysis without parameters"
     in
     let b =
-    if e_is_unique (p, m, dv) (EVar idi) then
+    if e_is_unique (p, pext, m, dv) (mk () (EVar idi)) then
       ((* Printf.printf "unique\n%!"; *)
        1)
     else
       (* let _ = Printf.printf "not unique\n%!" in *)
       let open CUDA_Cost in
       (* Uncomment for Presburger bounds - slow but maybe good? *)
-    let (lbs, ubs) = bounds p (Poly.of_expr (EVar idi))
+    let (lbs, ubs) = bounds p (Poly.of_expr (mk () (EVar idi)))
     in
     (*
     let boundplusx x (k, l) =
@@ -1126,10 +1305,10 @@ module Solver = struct
     (* let _ = Printf.printf "filling in %s\n" idi in *)
     let _ = ph := Some b in
     (* let _ = known_temps := M.add ido b !known_temps in *)
-    (p, m, dv)
+    (p, pext, m, dv)
   (* ((L.set ido (1) (L.const (-b)))::p, m) *)
 
-  let div params (p, m, dv) id o1 o2 =
+  let div params (p, pext, m, dv) id o1 o2 =
     let (params, metric) = match params with
       | Some x -> x
       | None -> failwith "Can't do CUDA analysis without parameters"
@@ -1189,15 +1368,15 @@ module Solver = struct
                           else
                             (cfst cuda_div, da1 || da2, false))
         | _ -> failwith "shouldn't happen"
-      in (p, M.add id d m, dv)
-    with _ -> (p, M.add id cuda_div m, dv)
+      in (p, pext, M.add id d m, dv)
+    with _ -> (p, pext, M.add id cuda_div m, dv)
 
-  let mod_f pm (p, m, dv) id o1 o2 =
+  let mod_f pm (p, pext, m, dv) id o1 o2 =
     let (params, metric) = match pm with
       | Some x -> x
       | None -> failwith "Can't do CUDA analysis without parameters"
     in
-    (
+    let (p', pext') =
       (try
          let (d2, da2, u2) = get_cd m o2 in
          match dom_is_const (d2, da2, u2) with
@@ -1206,25 +1385,32 @@ module Solver = struct
              Presburger.meet [Presburger.L.set id (-1) (Presburger.L.const 0);
                               Presburger.L.set id 1
                                 (Presburger.L.const (0 - (int_of_float c)))]
-               p)
-         | _ -> p
-       with _ -> p)
-    ,
+               p,
+             Presburger.meet [Presburger.L.set id (-1) (Presburger.L.const 0);
+                              Presburger.L.set id 1
+                                (Presburger.L.const (0 - (int_of_float c)))]
+               pext
+            )
+         | _ -> (p, pext)
+       with _ -> (p, pext))
+     in
+     (p, pext
+      ,
       (M.add id
          (if List.for_all (fun id -> cuda_is_unif (get_cd m id)) [o1; o2] then
             cuda_unif
           else cuda_div)
          m),
     dv)
-  let apply_TCallUninterp pm (p, m, dv) id f ids =
-    if is_bottom (p, m, dv) then bottom
+  let apply_TCallUninterp pm (p, pext, m, dv) id f ids =
+    if is_bottom (p, pext, m, dv) then bottom
     else if String.compare f "__div" = 0 then
       match ids with
-      | [o1; o2] -> div pm (p, m, dv) id o1 o2
+      | [o1; o2] -> div pm (p, pext, m, dv) id o1 o2
       | _ -> failwith "div must have exactly two arguments"
     else if String.compare f "__mod" = 0 then
       match ids with
-      | [o1; o2] -> mod_f pm (p, m, dv) id o1 o2
+      | [o1; o2] -> mod_f pm (p, pext, m, dv) id o1 o2
       | _ -> failwith "mod must have exactly two arguments"
     else
       ( ((*if String.compare f CUDA_Config.memreads_func = 0 then
@@ -1242,6 +1428,21 @@ module Solver = struct
         else *)
          p)
       ,
+        ((*if String.compare f CUDA_Config.memreads_func = 0 then
+         match ids with
+         | [idi; size; mem; read] ->
+            apply_MemReads pm (pext, m) id idi (int_of_string size) mem
+              (String.compare read "r" = 0)
+         | _ -> failwith "memreads must have exactly four arguments"
+       else if String.compare f CUDA_Config.bankconflicts_func = 0 then
+         match ids with
+         | [idi; size; read] ->
+            apply_BankConflicts pm (pext, m) id idi (int_of_string size)
+              (String.compare read "r" = 0)
+         | _ -> failwith "conflicts must have exactly three arguments"
+        else *)
+         pext)
+      ,
         (M.add id
            (if List.for_all (fun id -> cuda_is_unif (get_cd m id)) ids then
               cuda_unif
@@ -1249,9 +1450,12 @@ module Solver = struct
           m)
       , dv)
 
-  let apply pm graph hedge tabs =
-    (* let _ = Printf.printf "apply\n%!" in *)
+  let apply f
+        pm graph hedge tabs =
+    (* let _ = Printf.printf "apply %d\n%!" hedge in *)
     let gs = (PSHGraph.info graph).HyperGraph.globs in
+    let pred = (PSHGraph.predvertex graph hedge).(0) in
+    let _ = f pred tabs.(0) in
     let transfer = PSHGraph.attrhedge graph hedge in
     let res =
       match transfer with
@@ -1278,10 +1482,10 @@ module Solver = struct
              apply_TAssign pm abs ido (Some (Poly.of_expr e), ref e)) *)
       | TReturn (f, _) -> apply_TReturn gs tabs.(0) tabs.(1) f
       | TWeaken | TNone -> tabs.(0)
-      | TUnify -> let (p, m, _) = tabs.(0) in (p, m, false)
+      | TUnify -> let (p, pe, m, _) = tabs.(0) in (p, pe, m, false)
       | TSwitch ids ->
-         let (p, m, d) = tabs.(0) in
-         (p,
+         let (p, pe, m, d) = tabs.(0) in
+         (p, pe,
           List.fold_left (fun m id ->
               if M.mem id m then
                 M.add id cuda_div m
@@ -1293,9 +1497,11 @@ module Solver = struct
       | TCallUninterp (id, f, ids) -> apply_TCallUninterp pm tabs.(0) id f ids
     in ((), res)
 
-  let widening (a, m1, dv1) (b, m2, dv2) =
+  let widening (a, ae, m1, dv1) (b, be, m2, dv2) =
     let in_a x = List.exists (L.eq x) a in
+    let in_ae x = List.exists (L.eq x) ae in
     (Presburger.minimize (List.filter in_a b),
+     Presburger.minimize (List.filter in_ae be),
      M.merge (fun id d1 d2 ->
        let d1 = match d1 with Some x -> x | None -> cuda_bot in
        let d2 = match d2 with Some x -> x | None -> cuda_bot in
@@ -1303,14 +1509,15 @@ module Solver = struct
        m1 m2
     , dv1 || dv2)
 
-  let compute pm graph fstart =
+  let compute f pm graph fstart =
     let info = PSHGraph.info graph in
     let fs = Hashtbl.find info.HyperGraph.funch fstart in
+    let _ = args := fs.fun_args in
     let starts =
       PSette.singleton
         PSHGraph.stdcompare.PSHGraph.comparev
         (fstart, fs.fun_body.g_start) in
-    let fpman = make_fpmanager graph widening (apply pm) in
+    let fpman = make_fpmanager graph widening (apply f pm) in
     ( fpman
     , Fixpoint.analysis_std
         fpman graph starts
@@ -1372,13 +1579,13 @@ let debug_print fmt info graph res =
 
 (* Common API for abstract interpretation modules. *)
 
-let analyze ~dump pm (gl, fl) fstart =
-  (* let _ = Printf.printf "analyze\n%!" in *)
+let analyze ?f:(f : Types.id * int -> absval -> unit = fun _ _ -> ()) ~dump pm (gl, fl) fstart =
+  let _ = Printf.printf "analyzing with allow_extend=%b\n%!" (!glob_allow_extend) in
   let graph = HyperGraph.from_program (gl, fl) in
   let _ = Printf.printf "got graph\n%!" in
   let info = PSHGraph.info graph in
   (* let _ = Printf.printf "got info\n%!" in *)
-  let (fpman, res) = Solver.compute pm graph fstart in
+  let (fpman, res) = Solver.compute f pm graph fstart in
   let _ = Printf.printf "solved\n%!" in
   if dump then begin
     let fn = "simple_ai.dot" in 
@@ -1412,12 +1619,7 @@ let analyze ~dump pm (gl, fl) fstart =
   end;
   resh
 
-let is_nonneg (abs, _, _) pol =
-  if Poly.degree pol > 1 then false else
-  let l = L.mult (-1) (Translate.linear_of_poly pol) in
-  List.exists (L.eq l) abs || Presburger.implies abs l
-
-let get_nonneg (abs, _, _) =
+let get_nonneg (abs, _, _, _) =
   let neg x = float_of_int (-x) in
   let poly_of_linear l =
     L.fold
@@ -1425,6 +1627,6 @@ let get_nonneg (abs, _, _) =
       l.L.m (Poly.const (neg l.L.k))
   in List.map poly_of_linear abs
 
-let print_as_coq varname fmt (av, _, _) = Presburger.print_as_coq varname fmt av
+let print_as_coq varname fmt (av, _, _, _) = Presburger.print_as_coq varname fmt av
 
 let is_bot av = is_bottom av

@@ -2,5 +2,11 @@
 <frontc>: include
 <Graph_AI_Apron.ml>: use_apron
 <Clp_Stubs.c> or <Clp.ml>: use_clp
-<Driver.{native,byte,d.byte}>: use_unix, use_clp
+<Driver.{native,byte,d.byte}>: use_unix, use_clp, use_str
+<OptDriver.{native,byte,d.byte}>: use_unix, use_clp, use_str
+<CUDA_ConstantFold.{native,byte,d.byte}>: use_unix, use_clp, use_str
+<CUDA_Optimize.{native,byte,d.byte}>: use_unix, use_str
 <*.ml>: package(str)
+true: use_menhir
+<frontc/ctokens.mly>: only_tokens
+<frontc/cparser.mly>: use_tokens

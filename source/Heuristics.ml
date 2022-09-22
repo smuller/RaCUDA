@@ -160,7 +160,7 @@ let add_focus ?(degree=1) ai_results ai_get_nonneg ai_is_nonneg gfunc =
        a decrement, a reset, a no-op, or
        something else.
     *)
-    | AAssign (v, e, _) when !e = ERandom ->
+    | AAssign (v, e, _) when desc !e = ERandom ->
       if Poly.var_exists ((=) v) p then
         `DontKnow
       else
@@ -285,13 +285,13 @@ let add_focus ?(degree=1) ai_results ai_get_nonneg ai_is_nonneg gfunc =
         with
         | AAssign (v, e, _), _ ->
           let bs =
-            match !e with
+            match desc !e with
             | ERandom ->
               PSet.filter
                 (fun b -> not (Poly.var_exists ((=) v) b))
                 bs
-            | e ->
-              let pe = Poly.of_expr e in
+            | _ ->
+              let pe = Poly.of_expr !e in
               pset_map (poly_subst v pe) bs
           in
           PSet.union bs' (go bs pred)
@@ -465,7 +465,7 @@ let add_focus_old ?(degree=1) ai_results ai_get_nonneg _ gfunc =
     Array.fold_left
       (List.fold_left begin fun l (a, _) ->
           match a with
-          | AAssign (_, e, _) when !e = ERandom -> l
+          | AAssign (_, e, _) when desc !e = ERandom -> l
           | AAssign (v, e, _) -> (v, Poly.of_expr !e) :: l
           | _ -> l
         end)

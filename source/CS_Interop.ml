@@ -123,13 +123,14 @@ struct
         let rn' = new_node () in
         new_edge n (AProb p) ln';
         (* edge to fin *)
-        let e' = match op with
-                 | Dadd ->
-                   EAdd (e, ENum k)
-                 | Dsub ->
-                   ESub (e, ENum k)
-                 | Dmul ->
-                   EMul (e, ENum k)
+        let e' = mk ()
+                   (match op with
+                    | Dadd ->
+                       EAdd (e, mk () (ENum k))
+                    | Dsub ->
+                       ESub (e, mk () (ENum k))
+                    | Dmul ->
+                       EMul (e, mk () (ENum k)))
         in
         new_edge ln' (AAssign (id, ref e', ref false)) e_node;
         new_edge n (AProb (1. -. p)) rn';
@@ -138,20 +139,21 @@ struct
 
       let last_level_node = List.fold_left create_prob_branching s_node (List.combine keys' probs) in
       (* the last edge *)
-      let e' = match op with
-               | Dadd ->
-                 EAdd (e, ENum last_key)
-               | Dsub ->
-                 ESub (e, ENum last_key)
-               | Dmul ->
-                 EMul (e, ENum last_key)
+      let e' = mk ()
+                   (match op with
+                    | Dadd ->
+                       EAdd (e, mk () (ENum last_key))
+                    | Dsub ->
+                       ESub (e, mk () (ENum last_key))
+                    | Dmul ->
+                       EMul (e, mk () (ENum last_key)))
       in
       new_edge last_level_node (AAssign (id, ref e', ref false)) e_node;
       e_node
     in
 
     let transform_ber id e op d s_node =
-      match d with
+      match desc d with
       | EBer (pa, pb) ->
         let (keys, probs) = List.split (Dist.ber_to_list pa pb) in
         to_prob_branching id e op s_node keys [List.hd probs]
@@ -159,7 +161,7 @@ struct
     in
   
     let transform_bin id e op d s_node = 
-      match d with
+      match desc d with
       | EBin (n, pa, pb) -> 
         let key_probs = Dist.bin_to_list n pa pb in 
         let transformed_probs = Dist.transform_prob key_probs in 
@@ -180,7 +182,7 @@ struct
     in
 
     let transform_hyper id e op d s_node = 
-      match d with
+      match desc d with
       | EHyper (n, r, m) ->
         let key_probs = Dist.hyper_to_list n r m in 
         let transformed_probs = Dist.transform_prob key_probs in
@@ -189,7 +191,7 @@ struct
     in
 
     let transform_unif id e op d s_node = 
-      match d with
+      match desc d with
       | EUnif (lb, ub) ->
         let key_probs = Dist.unif_to_list lb ub in
         let transformed_probs = Dist.transform_prob key_probs in
@@ -198,7 +200,7 @@ struct
     in
 
     let transform_dist id e s_node =
-      match e with
+      match desc e with
       | EAdd (e1, e2) ->
         let dt1 = Dist.get_type e1 in
         let dt2 = Dist.get_type e2 in
@@ -324,7 +326,8 @@ struct
     let do_ins s_node ins =
       match ins with
       | CSITick n -> 
-        create_assign_edge tick_var (EAdd (EVar tick_var, ENum n)) s_node
+         create_assign_edge tick_var
+           (mk () (EAdd (mk () (EVar tick_var), mk () (ENum n)))) s_node
 
       | CSIAssume log ->
         let e_node = new_node () in
@@ -332,10 +335,11 @@ struct
         e_node
 
       | CSIAssign (id, e) ->
-        (* transform all samplings into the equivalent probabilistic branchings *)
+         (* transform all samplings into the equivalent probabilistic branchings *)
+         (*
         if transformed then
           begin
-             match e with
+             match desc e with
             | ERandom ->
               (*failwith "expression contains random"*)
 	            create_assign_edge id e s_node
@@ -350,7 +354,7 @@ struct
               else 
                 create_assign_edge id e s_node
           end
-        else
+        else *)
           create_assign_edge id e s_node
 
       | CSICall id -> 

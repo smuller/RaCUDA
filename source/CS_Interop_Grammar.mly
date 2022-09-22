@@ -85,7 +85,7 @@ cfuncs:
     /* empty */         { [] } 
   | cfunc TSEMI cfuncs  { $1 :: $3 }
 
-expr:
+expr_:
   | TIDENT                                                                    { EVar $1 }
   | TNUM                                                                      { ENum $1 }
   | TBER TLPAR TNUM TCOMMA TNUM TRPAR                                         { EBer ($3, $5) }
@@ -99,14 +99,17 @@ expr:
   | TUNIF TLPAR TNUM TCOMMA TSUB TNUM TRPAR                                   { EUnif ($3, (0 - $6)) }
   | TUNIF TLPAR TSUB TNUM TCOMMA TSUB TNUM TRPAR                              { EUnif ((0 - $4), (0 - $7)) }
   | TDIST TLPAR TIDENT TCOMMA TNUM TCOMMA TNUM TCOMMA TNUM TCOMMA TNUM TRPAR  { EDist ($3, $5, $7, $9, $11) }
-  | TSUB expr                                                                 { ESub (ENum 0, $2) }
+  | TSUB expr                                                                 { ESub (mk () (ENum 0), $2) }
   | expr TADD expr                                                            { EAdd ($1, $3) }
   | expr TSUB expr                                                            { ESub ($1, $3) }
   | expr TMUL expr                                                            { EMul ($1, $3) }
-  | TLPAR expr TRPAR                                                          { $2 }
+  | TLPAR expr TRPAR                                                          {  (desc $2) }
+
+expr:
+  | expr_  {mk () $1 }
 
 exprr:
-  | TRANDOM { ERandom }
+  | TRANDOM { mk () ERandom }
   | expr    { $1 }
 
 prob_expr:

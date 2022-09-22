@@ -32,7 +32,7 @@ let analyze f =
 
   (* traverse expression, add variable into a var set *)
   let rec traverse_exp exp vars = 
-    match exp with
+    match desc exp with
     | EVar id -> VarSet.add id vars
     | EAdd (exp1, exp2) -> traverse_exp exp1 (traverse_exp exp2 vars)
     | ESub (exp1, exp2) -> traverse_exp exp1 (traverse_exp exp2 vars)

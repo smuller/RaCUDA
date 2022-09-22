@@ -5,19 +5,22 @@ open Types
 
 type node = int
 
+type uexpr = unit expr
+type ulogic = unit logic
+          
 type action =
   | ANone
   | AWeaken
-  | AGuard of logic
-  | AAssign of id * expr ref * bool ref (* potential-carrying assignment *)
+  | AGuard of ulogic
+  | AAssign of id * uexpr ref * bool ref (* potential-carrying assignment *)
   | AAddMemReads of id * id * int option ref * int * bool * bool
   (* tick var, input var, placeholder for cost, bits, host, read *)
   | AAddConflicts of id * id * int option ref * int * bool
   (* tick var, input var, placeholder for cost, bits, read *)
   | ACall of id
   | AProb of float (* probabilistic branching *)
-  | AUnique of logic ref
-  | ANotUnique of logic ref
+  | AUnique of ulogic ref
+  | ANotUnique of ulogic ref
   | ACallUninterp of id * string * id list
   | AUnify
   | ASwitch of id list

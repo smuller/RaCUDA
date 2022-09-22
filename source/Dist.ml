@@ -11,7 +11,7 @@ let fsmall = 1e-7
     e can not be nested.
 *)
 let get_type e = 
-    match e with
+    match desc e with
     | ERandom | EVar _ | ENum _ | EDist _ -> Det
     | EBer _ -> Ber
     | EBin _ -> Bin
@@ -24,7 +24,7 @@ let get_type e =
 
 
 let rec is_sampling e = 
-    match e with
+    match desc e with
     | ERandom | EVar _ | ENum _ | EDist _ -> false
     | EBer _ | EBin _ | EGeo _ | ENbin _ | EPois _ | EHyper _ | EUnif _ -> true
     | EAdd (e1, e2) -> (is_sampling e1) || (is_sampling e2)
