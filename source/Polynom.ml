@@ -34,9 +34,10 @@ end
 module type Poly = sig
   type t and monom
   val zero: unit -> t
+  val always_less: t -> t -> bool
   val const: float -> t
   val of_monom: monom -> float -> t
-  val of_expr: Types.expr -> t
+  val of_expr: 'a Types.expr -> t
   val compare: t -> t -> int
   val degree: t -> int
   val var_exists: (Types.id -> bool) -> t -> bool
@@ -178,6 +179,8 @@ module MkPoly(Mon: Monom)
   let compare = (M.compare compare: t -> t -> int)
   let fold = M.fold
 
+  let always_less a b = true
+
   (* p = k.m *)
   let of_monom m k = M.singleton m k
 
@@ -254,7 +257,8 @@ module MkPoly(Mon: Monom)
     end p1 zero
 
   (* p = e *)
-  let rec of_expr = function
+  let rec of_expr e =
+    match Types.desc e with
     | Types.ERandom -> failwith "expression contains random"
     | Types.EVar v -> of_monom (Mon.of_var v) 1.
     | Types.ENum n -> of_monom Mon.one (float_of_int n)

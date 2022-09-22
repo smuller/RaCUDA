@@ -34,12 +34,12 @@ let rec read_expr ic =
     f l r
   in
   match read_byte ic with
-  | 1 -> binop (fun l r -> EAdd (l, r))
-  | 2 -> binop (fun l r -> ESub (l, r))
-  | 3 -> binop (fun l r -> EMul (l, r))
-  | 4 -> ENum (read_int ic)
-  | 5 -> EVar (read_string ic)
-  | 6 -> ERandom
+  | 1 -> binop (fun l r -> mk () (EAdd (l, r)))
+  | 2 -> binop (fun l r -> mk () (ESub (l, r)))
+  | 3 -> binop (fun l r -> mk () (EMul (l, r)))
+  | 4 -> mk () (ENum (read_int ic))
+  | 5 -> mk () (EVar (read_string ic))
+  | 6 -> mk () ERandom
   | _ -> error "invalid expression type"
 
 let read_logic ic =

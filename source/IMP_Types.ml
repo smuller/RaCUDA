@@ -3,16 +3,16 @@
 
 open Types
 
-type instr =
+type 'a instr =
   | IBreak
   | IWeaken
-  | IAssume of logic
-  | IAssign of id * expr
-  | IIf of logic * block * block
-  | IIfNoElse of logic * block
-  | IProbIf of prob_expr * block * block (* probability = (a,b), left commands, right commands *)
-  | IWhile of logic * block
-  | ILoop of block
+  | IAssume of 'a logic
+  | IAssign of id * 'a expr
+  | IIf of 'a logic * 'a block * 'a block
+  | IIfNoElse of 'a logic * 'a block
+  | IProbIf of prob_expr * 'a block * 'a block (* probability = (a,b), left commands, right commands *)
+  | IWhile of 'a logic * 'a block
+  | ILoop of 'a block
   | ICall of id
   | ITick of int
   | ITickMemReads of id * int * bool * bool (* bits, host, read *)
@@ -21,10 +21,11 @@ type instr =
   | ICallUninterp of id * id * id list (* function call with arguments and return variables *)
   | IReturn of id list 
 
-and block =
+and 'a block =
   { b_start_p: position
   ; b_end_p: position
-  ; b_body: (instr * position) list
+  ; b_body: ('a instr * position) list
+  ; annot: 'a
   }
 
-type func = (Focus.focus, block) func_
+type 'a func = (Focus.focus, 'a block) func_

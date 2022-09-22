@@ -5,19 +5,20 @@
   open Types
   open IMP_Types
 
-  let mkb (startp, b, endp) =
+  let mkb (startp, b, endp) : unit IMP_Types.block =
     { b_start_p = startp
     ; b_end_p = endp
     ; b_body = b
+    ; annot = ()
     }
   let b b_start_p blk = { blk with b_start_p }
   let belse p b = mkb (b.b_end_p, [], b.b_end_p)
 
 %}
 
-%token TVAR TTRUE TFALSE TRANDOM TSKIP TDO 
+%token TVAR TTRUE TFALSE TRANDOM TSKIP 
 %token TDIST TBER TBIN TGEO TNBIN TPOIS THYPER TUNIF
-%token TTHEN TNOT TAND TOR TFOCUS TSEMI TCOMMA
+%token TNOT TAND TOR TFOCUS TSEMI TCOMMA
 %token TRPAR TLEQ TLT TGEQ TGT TEQ TNE TADD TSUB TMUL
 %token TEOF TNL
 %token <Types.position> TBREAK TRETURN TASSUME TIF TELSE TWHILE TLOOP TLPAR TPROBIF
@@ -32,7 +33,16 @@
 %left TADD TSUB
 %left TMUL
 
-%type <Types.id list * (Types.free_expr, IMP_Types.block) Types.func_ list> file
+%type <Types.id list * (unit Types.free_expr, unit IMP_Types.block) Types.func_ list> file
+%type <unit Types.expr_> expr_
+%type <unit Types.expr> expr
+%type <unit Types.expr> exprr
+%type <unit Types.logic> logic
+%type <unit IMP_Types.instr * Types.position> simpl
+%type <unit IMP_Types.instr * Types.position> instr
+%type <unit Types.free_expr> free
+%type <unit IMP_Types.block> block
+%type <Types.id> ident
 %start file
 %%
 
@@ -40,7 +50,7 @@ file: varopt rfuncs TEOF { $1, List.rev $2 }
 
 ident: TIDENT { fst $1 }
 
-expr:
+expr_:
   | ident                                                                     { EVar $1 }
   
   | TNUM                                                                      { ENum $1 }
@@ -56,7 +66,7 @@ expr:
   | TPOIS TLPAR TNUM TCOMMA TNUM TRPAR                                        { EPois ($3, $5) }
   
   | THYPER TLPAR TNUM TCOMMA TNUM TCOMMA TNUM TRPAR                           { EHyper ($3, $5, $7) }
-  
+
   | TUNIF TLPAR TNUM TCOMMA TNUM TRPAR                                        { EUnif ($3, $5) }
   | TUNIF TLPAR TSUB TNUM TCOMMA TNUM TRPAR                                   { EUnif ((0 - $4), $6) }
   | TUNIF TLPAR TNUM TCOMMA TSUB TNUM TRPAR                                   { EUnif ($3, (0 - $6)) }
@@ -64,18 +74,21 @@ expr:
 
   | TDIST TLPAR TIDENT TCOMMA TNUM TCOMMA TNUM TCOMMA TNUM TCOMMA TNUM TRPAR  { EDist (fst $3, $5, $7, $9, $11) }
   
-  | TSUB expr                                                                 { ESub (ENum 0, $2) }
-  
+  | TSUB expr                                                                 { ESub (mk () (ENum 0), $2) }
+
   | expr TADD expr                                                            { EAdd ($1, $3) }
   
   | expr TSUB expr                                                            { ESub ($1, $3) }
   
   | expr TMUL expr                                                            { EMul ($1, $3) }
-  
-  | TLPAR expr TRPAR                                                          { $2 }
+
+  | TLPAR expr_ TRPAR                                                          { $2 }
+
+expr:
+| expr_   { mk () $1 }
 
 exprr:
-  | TRANDOM { ERandom }
+  | TRANDOM { mk () ERandom }
   | expr    { $1 }
 
 prob_expr:

@@ -20,7 +20,7 @@ let print_position fmt pos =
     (pos.pos_char - pos.pos_bol + 1)
 
 let rec expr_to_str e = 
-  match e with
+  match desc e with
   | ERandom -> 
     Printf.sprintf "random"
   | EVar id -> 

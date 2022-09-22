@@ -29,7 +29,8 @@ let statevar s varname x =
   s ^ " " ^ varname x
 
 (* Assumes that we have a state s in the context. *)
-let rec dump_expr_norand varname fmt  = function
+let rec dump_expr_norand varname fmt e =
+  match desc e with
   | ERandom ->
     failwith "ERandom in invalid context"
   | EVar x ->
@@ -53,10 +54,11 @@ let rec dump_expr_norand varname fmt  = function
   | EUnif (_, _) | EDist (_, _, _, _, _) -> 
     Utils._TODO "Coq proof for probabilistic program is not supported."
 
-let dump_expr varname fmt = function
+let dump_expr varname fmt e =
+  match desc e with
   | ERandom ->
     Format.fprintf fmt "None"
-  | e ->
+  | _ ->
     Format.fprintf fmt "(Some %a)"
       (dump_expr_norand varname) e
 

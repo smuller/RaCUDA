@@ -90,16 +90,25 @@ let print_graph_prg ?need_analysis:(neededness = None) oc globals func_l =
    given IMP program.  The nodes of the graph
    are program points and the edges have
    actions on them.
-*)
-let from_imp transformed tick_var impf =
+ *)
+
+type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
+type hannot = annot Types.expr list
+
+            
+let from_imp_with_annots transformed tick_var
+      (impf : (Focus.focus, 'annot IMP.block) Types.func_)
+    : 'c * ((int, 'annot Types.expr list) Hashtbl.t) =
 
   let h_position = Hashtbl.create 51 in
   let h_edges = Hashtbl.create 51 in
+  let h_annots = Hashtbl.create 51 in
 
   let next_node = ref 0 in
-  let new_node pos =
+  let new_node a pos =
     let node = !next_node in
     Hashtbl.add h_position node pos;
+    Hashtbl.add h_annots node a;
     incr next_node;
     node
   in
@@ -110,23 +119,24 @@ let from_imp transformed tick_var impf =
     Hashtbl.add h_edges src (act, dst)
   in
 
-  let create_assign_edge id e fin pos = 
-    let beg = new_node pos in
+  let create_assign_edge a id e fin pos = 
+    let beg = new_node a pos in
     new_edge beg (AAssign (id, ref e, ref false)) fin; 
     beg
   in
-  let create_pot_assign_edge id e fin pos = 
-    let beg = new_node pos in
+  let create_pot_assign_edge a id e fin pos = 
+    let beg = new_node a pos in
     new_edge beg (AAssign (id, ref e, ref true)) fin; 
     beg
   in
-  let create_switch_edge e fin pos =
-    let beg = new_node pos in
+  let create_switch_edge a e fin pos =
+    let beg = new_node a pos in
     new_edge beg (ASwitch (IMP.written_block e)) fin;
     beg
   in
 
-  let to_prob_branching id e op fin pos keys probs =
+  let to_prob_branching a id e op fin pos keys probs =
+    let new_node = new_node a in
     let last_key = List.hd (List.rev keys) in
     if false then Printf.printf "to_prob_branching last_key = %d\n" last_key;
     let keys' = List.rev (List.tl (List.rev keys)) in
@@ -140,11 +150,11 @@ let from_imp transformed tick_var impf =
       (* edge to fin *)
       let e' = match op with
                | Dadd ->
-                 EAdd (e, ENum k)
+                 mk () (EAdd (e, mk () (ENum k)))
                | Dsub ->
-                 ESub (e, ENum k)
+                 mk () (ESub (e, mk () (ENum k)))
                | Dmul ->
-                 EMul (e, ENum k)
+                 mk () (EMul (e, mk () (ENum k)))
       in
       new_edge ln' (AAssign (id, ref e', ref false)) fin;
       new_edge n (AProb (1. -. p)) rn';
@@ -156,104 +166,104 @@ let from_imp transformed tick_var impf =
     (* the last edge *)
     let e' = match op with
              | Dadd ->
-               EAdd (e, ENum last_key)
+               mk () (EAdd (e, mk () (ENum last_key)))
              | Dsub ->
-               ESub (e, ENum last_key)
+               mk () (ESub (e, mk () (ENum last_key)))
              | Dmul ->
-               EMul (e, ENum last_key)
+               mk () (EMul (e, mk () (ENum last_key)))
     in
     new_edge last_level_node (AAssign (id, ref e', ref false)) fin;
     beg
   in
 
-  let transform_ber id e op d fin pos =
-    match d with
+  let transform_ber a id e op d fin pos =
+    match desc d with
     | EBer (pa, pb) ->
       let (keys, probs) = List.split (Dist.ber_to_list pa pb) in
       if false then List.iter2 (Printf.printf "(%d : %f)\n") keys probs;
-      to_prob_branching id e op fin pos keys [List.hd probs]
+      to_prob_branching a id e op fin pos keys [List.hd probs]
     | _ -> failwith "Graph:ber: invalid input program"
   in
   
-  let transform_bin id e op d fin pos = 
-    match d with
+  let transform_bin a id e op d fin pos = 
+    match desc d with
     | EBin (n, pa, pb) -> 
       let key_probs = Dist.bin_to_list n pa pb in 
       let transformed_probs = Dist.transform_prob key_probs in 
       if false then List.iter2 (Printf.printf "(%d : %f)\n") (fst (List.split key_probs)) (snd (List.split key_probs));
-      to_prob_branching id e op fin pos (fst (List.split key_probs)) transformed_probs
+      to_prob_branching a id e op fin pos (fst (List.split key_probs)) transformed_probs
     | _ -> failwith "Graph:bin: invalid input program"
   in
 
-  let transform_geo id e op d fin pos = 
+  let transform_geo a id e op d fin pos = 
     failwith "Geometric sampling distribution is not supported"
   in
 
-  let transform_nbin id e op d fin pos = 
+  let transform_nbin a id e op d fin pos = 
     failwith "Negative binomial sampling distribution is not supported"
   in
 
-  let transform_pois id e op d fin pos =
+  let transform_pois a id e op d fin pos =
     failwith "Poisson sampling distribution is not supported"
   in
 
-  let transform_hyper id e op d fin pos = 
-    match d with
+  let transform_hyper a id e op d fin pos = 
+    match desc d with
     | EHyper (n, r, m) ->
       let key_probs = Dist.hyper_to_list n r m in 
       let transformed_probs = Dist.transform_prob key_probs in
       if false then List.iter2 (Printf.printf "(%d : %f)\n") (fst (List.split key_probs)) (snd (List.split key_probs));
-      to_prob_branching id e op fin pos (fst (List.split key_probs)) transformed_probs
+      to_prob_branching a id e op fin pos (fst (List.split key_probs)) transformed_probs
     | _ -> failwith "Graph:hyper: invalid input program"
   in
 
-  let transform_unif id e op d fin pos = 
-    match d with
+  let transform_unif a  id e op d fin pos = 
+    match desc d with
     | EUnif (lb, ub) ->
       let key_probs = Dist.unif_to_list lb ub in
       let transformed_probs = Dist.transform_prob key_probs in
       if false then List.iter2 (Printf.printf "(%d : %f)\n") (fst (List.split key_probs)) (snd (List.split key_probs));
-      to_prob_branching id e op fin pos (fst (List.split key_probs)) transformed_probs
+      to_prob_branching a id e op fin pos (fst (List.split key_probs)) transformed_probs
     | _ -> failwith "Graph:unif: invalid input program"
   in
 
-  let transform_dist id e fin loo pos =
-    match e with
+  let transform_dist a id e fin loo pos =
+    match desc e with
     | EAdd (e1, e2) ->
       let dt1 = Dist.get_type e1 in
       let dt2 = Dist.get_type e2 in
       begin
         match (dt1, dt2) with
         | (Det, Det) ->
-          create_assign_edge id e fin pos
+          create_assign_edge a id e fin pos
         | (Det, Ber) -> 
-          transform_ber id e1 Dadd e2 fin pos
+          transform_ber a id e1 Dadd e2 fin pos
         | (Det, Bin) ->
-          transform_bin id e1 Dadd e2 fin pos
+          transform_bin a id e1 Dadd e2 fin pos
         | (Det, Geo) ->
-          transform_geo id e1 Dadd e2 fin pos
+          transform_geo a id e1 Dadd e2 fin pos
         | (Det, Nbin) ->
-          transform_nbin id e1 Dadd e2 fin pos
+          transform_nbin a id e1 Dadd e2 fin pos
         | (Det, Pois) ->
-          transform_pois id e1 Dadd e2 fin pos
+          transform_pois a id e1 Dadd e2 fin pos
         | (Det, Hyper) ->
-          transform_hyper id e1 Dadd e2 fin pos
+          transform_hyper a id e1 Dadd e2 fin pos
         | (Det, Unif) ->
-          transform_unif id e1 Dadd e2 fin pos
+          transform_unif a id e1 Dadd e2 fin pos
         | (Ber, Det) -> 
-          transform_ber id e2 Dadd e1 fin pos
+          transform_ber a id e2 Dadd e1 fin pos
         | (Bin, Det) ->
-          transform_bin id e2 Dadd e1 fin pos
+          transform_bin a id e2 Dadd e1 fin pos
         | (Geo, Det) ->
-          transform_geo id e2 Dadd e1 fin pos
+          transform_geo a id e2 Dadd e1 fin pos
         | (Nbin, Det) ->
-          transform_nbin id e2 Dadd e1 fin pos
+          transform_nbin a id e2 Dadd e1 fin pos
         | (Pois, Det) ->
-          transform_pois id e2 Dadd e1 fin pos
+          transform_pois a id e2 Dadd e1 fin pos
         | (Hyper, Det) ->
-          transform_hyper id e2 Dadd e1 fin pos
+          transform_hyper a id e2 Dadd e1 fin pos
         | (Unif, Det) ->
-          transform_unif id e2 Dadd e1 fin pos
+          transform_unif a id e2 Dadd e1 fin pos
         | (_, _) ->
           failwith "Graph:transform_dist:EAdd: invalid input program"
       end
@@ -263,35 +273,35 @@ let from_imp transformed tick_var impf =
       begin
         match (dt1, dt2) with
         | (Det, Det) ->
-          create_assign_edge id e fin pos
+          create_assign_edge a id e fin pos
         | (Det, Ber) -> 
-          transform_ber id e1 Dsub e2 fin pos
+          transform_ber a id e1 Dsub e2 fin pos
         | (Det, Bin) ->
-          transform_bin id e1 Dsub e2 fin pos
+          transform_bin a id e1 Dsub e2 fin pos
         | (Det, Geo) ->
-          transform_geo id e1 Dsub e2 fin pos
+          transform_geo a id e1 Dsub e2 fin pos
         | (Det, Nbin) ->
-          transform_nbin id e1 Dsub e2 fin pos
+          transform_nbin a id e1 Dsub e2 fin pos
         | (Det, Pois) ->
-          transform_pois id e1 Dsub e2 fin pos
+          transform_pois a id e1 Dsub e2 fin pos
         | (Det, Hyper) ->
-          transform_hyper id e1 Dsub e2 fin pos
+          transform_hyper a id e1 Dsub e2 fin pos
         | (Det, Unif) ->
-          transform_unif id e1 Dsub e2 fin pos
+          transform_unif a id e1 Dsub e2 fin pos
         | (Ber, Det) -> 
-          transform_ber id e2 Dsub e1 fin pos
+          transform_ber a id e2 Dsub e1 fin pos
         | (Bin, Det) ->
-          transform_bin id e2 Dsub e1 fin pos
+          transform_bin a id e2 Dsub e1 fin pos
         | (Geo, Det) ->
-          transform_geo id e2 Dsub e1 fin pos
+          transform_geo a id e2 Dsub e1 fin pos
         | (Nbin, Det) ->
-          transform_nbin id e2 Dsub e1 fin pos
+          transform_nbin a id e2 Dsub e1 fin pos
         | (Pois, Det) ->
-          transform_pois id e2 Dsub e1 fin pos
+          transform_pois a id e2 Dsub e1 fin pos
         | (Hyper, Det) ->
-          transform_hyper id e2 Dsub e1 fin pos
+          transform_hyper a id e2 Dsub e1 fin pos
         | (Unif, Det) ->
-          transform_unif id e2 Dsub e1 fin pos
+          transform_unif a id e2 Dsub e1 fin pos
         | (_, _) ->
           failwith "Graph:transform_dist:ASub: invalid input program"
       end
@@ -301,35 +311,35 @@ let from_imp transformed tick_var impf =
       begin
         match (dt1, dt2) with
         | (Det, Det) ->
-          create_assign_edge id e fin pos
+          create_assign_edge a id e fin pos
         | (Det, Ber) -> 
-          transform_ber id e1 Dmul e2 fin pos
+          transform_ber a id e1 Dmul e2 fin pos
         | (Det, Bin) ->
-          transform_bin id e1 Dmul e2 fin pos
+          transform_bin a id e1 Dmul e2 fin pos
         | (Det, Geo) ->
-          transform_geo id e1 Dmul e2 fin pos
+          transform_geo a id e1 Dmul e2 fin pos
         | (Det, Nbin) ->
-          transform_nbin id e1 Dmul e2 fin pos
+          transform_nbin a id e1 Dmul e2 fin pos
         | (Det, Pois) ->
-          transform_pois id e1 Dmul e2 fin pos
+          transform_pois a id e1 Dmul e2 fin pos
         | (Det, Hyper) ->
-          transform_hyper id e1 Dmul e2 fin pos
+          transform_hyper a id e1 Dmul e2 fin pos
         | (Det, Unif) ->
-          transform_unif id e1 Dmul e2 fin pos
+          transform_unif a id e1 Dmul e2 fin pos
         | (Ber, Det) -> 
-          transform_ber id e2 Dmul e1 fin pos
+          transform_ber a id e2 Dmul e1 fin pos
         | (Bin, Det) ->
-          transform_bin id e2 Dmul e1 fin pos
+          transform_bin a id e2 Dmul e1 fin pos
         | (Geo, Det) ->
-          transform_geo id e2 Dmul e1 fin pos
+          transform_geo a id e2 Dmul e1 fin pos
         | (Nbin, Det) ->
-          transform_nbin id e2 Dmul e1 fin pos
+          transform_nbin a id e2 Dmul e1 fin pos
         | (Pois, Det) ->
-          transform_pois id e2 Dmul e1 fin pos
+          transform_pois a id e2 Dmul e1 fin pos
         | (Hyper, Det) ->
-          transform_hyper id e2 Dmul e1 fin pos
+          transform_hyper a id e2 Dmul e1 fin pos
         | (Unif, Det) ->
-          transform_unif id e2 Dmul e1 fin pos
+          transform_unif a id e2 Dmul e1 fin pos
         | (_, _) ->
           failwith "Graph:transform_dist:EMul: invalid input program"
       end
@@ -337,94 +347,111 @@ let from_imp transformed tick_var impf =
       failwith "it should not happen"
   in
 
+  let rec eol l =
+    match l with
+    | LTrue | LFalse | LRandom -> []
+    | LCmp (e1, _, e2) -> [e1; e2]
+    | LAnd (l1, l2) | LOr (l1, l2) -> (eol l1) @ (eol l2)
+    | LNot l -> eol l
+  in
+
   (* graph for one instruction *)
-  let rec goi fin loo pos = function
+  let rec goi fin loo pos : 'a IMP_Types.instr -> node =
+    (*
+    let create_assign_edge = create_assign_edge a in
+    let new_node = new_node a in
+     *)
+    let create_switch_edge = create_switch_edge [] in
+    function
     | IMP.IBreak -> 
       loo
     | IMP.IWeaken ->
-      let beg = new_node pos in
+      let beg = new_node [] pos in
       new_edge beg AWeaken fin;
       beg
     | IMP.IAssume log ->
-      let beg = new_node pos in
-      new_edge beg (AGuard log) fin;
+      let beg = new_node [] pos in
+      new_edge beg (AGuard (erase_l log)) fin;
       beg
     | IMP.IAssign (id, e) ->
-      (* transform all samplings into equivalent probabilistic branchings *)
+       (* transform all samplings into equivalent probabilistic branchings *)
+       (*
       if transformed then
         begin
-           match e with
+           match desc e with
           | ERandom ->
             (*failwith "expression contains random"*)
-            create_assign_edge id e fin pos
+            create_assign_edge [] id e fin pos
           | EVar _ | ENum _ | EDist _ -> 
-            create_assign_edge id e fin pos
+            create_assign_edge [] id e fin pos
           | EBer _ | EBin _ | EGeo _ | ENbin _ | EPois _ | EHyper _ | EUnif _ -> 
-            transform_dist id (EAdd ((ENum 0), e)) fin loo pos
+            transform_dist [] id (mk () EAdd ((ENum 0), e)) fin loo pos
           | EAdd _ | ESub _ | EMul _ -> 
             if (Dist.is_sampling e) then 
-              transform_dist id e fin loo pos
+              transform_dist [] id e fin loo pos
             else 
-              create_assign_edge id e fin pos
+              create_assign_edge [e] id e fin pos
         end
-      else
-        create_assign_edge id e fin pos
+      else *)
+        create_assign_edge [e] id (erase_e e) fin pos
     | IMP.ITick n ->
-       create_pot_assign_edge tick_var (EAdd (EVar tick_var, ENum n)) fin pos
+       create_pot_assign_edge [] tick_var
+         (mk () (EAdd (mk () (EVar tick_var), mk () (ENum n)))) fin pos
     | IMP.ITickMemReads (id, size, host, read) ->
-       let beg = new_node pos in
+       let beg = new_node [] pos in
        let ph = ref None in
        new_edge beg (AAddMemReads (tick_var, id, ph, size, host, read)) fin;
        beg
     | IMP.ITickConflicts (id, size, read) ->
-       let beg = new_node pos in
+       let beg = new_node [] pos in
        let ph = ref None in
        new_edge beg (AAddConflicts (tick_var, id, ph, size, read)) fin;
        beg
     | IMP.IIf (log, bi, be) ->
-       let beg = new_node pos in
-       let fini = new_node be.IMP.b_end_p in
-       let fin2a = new_node be.IMP.b_end_p in
+       let a = eol log in
+       let beg = new_node a pos in
+       let fini = new_node [] be.IMP.b_end_p in
+       let fin2a = new_node [] be.IMP.b_end_p in
        let fin2 = create_switch_edge be fin2a be.IMP.b_end_p in
       let begi = gob fini loo bi in
       let bege = gob fin2 loo be in
       let bege2 = gob fini loo be in
       let bege2 = create_switch_edge bi bege2 be.IMP.b_start_p in
       let begi2 = gob bege2 loo bi in
-      let tick = create_pot_assign_edge tick_var
-                   (EAdd (EVar tick_var,
-                          EVar (CUDA_Config.div_cost)))
+      let tick = create_pot_assign_edge a tick_var
+                   (mk () (EAdd (mk () (EVar tick_var),
+                          mk () (EVar (CUDA_Config.div_cost)))))
                    begi2
                    pos
       in
-      new_edge beg (ANotUnique (ref log)) tick;
+      new_edge beg (ANotUnique (ref (erase_l log))) tick;
       (* new_edge fini (ANotUnique (ref log)) tick; *)
       new_edge fini (ANone) fin2a;
       (* XXX new_edge beg (ANotUnique (ref log)) begi2; *)
-      new_edge beg (AGuard log) begi;
-      new_edge beg (AGuard (LNot log)) bege;
+      new_edge beg (AGuard (erase_l log)) begi;
+      new_edge beg (AGuard (erase_l (LNot log))) bege;
       (* new_edge beg (ANone) begi2; *)
       new_edge fin2a AUnify fin;
       beg
     | IMP.IIfNoElse (log, bi) ->
-       let beg = new_node pos in
-       let fini = new_node bi.IMP.b_end_p in
-       let fin2a = new_node bi.IMP.b_end_p in
+       let beg = new_node (eol log) pos in
+       let fini = new_node [] bi.IMP.b_end_p in
+       let fin2a = new_node [] bi.IMP.b_end_p in
        let fin2 = create_switch_edge bi fin2a bi.IMP.b_end_p in
       let begi = gob fini loo bi in
       let begi2 = gob fin2 loo bi in
-      let tick = create_pot_assign_edge tick_var
-                   (EAdd (EVar tick_var,
-                          EVar (CUDA_Config.div_cost)))
+      let tick = create_pot_assign_edge [] tick_var
+                   (mk () (EAdd (mk () (EVar tick_var),
+                          mk () (EVar (CUDA_Config.div_cost)))))
                    begi2
                    pos
       in
-      new_edge beg (ANotUnique (ref log)) tick;
+      new_edge beg (ANotUnique (ref (erase_l log))) tick;
       (* new_edge fini (ANotUnique (ref log)) tick; *)
       new_edge fini (ANone) fin2a;
       (* XXX new_edge beg (ANotUnique (ref log)) begi2; *)
-      new_edge beg (AGuard log) begi;
-      new_edge beg (AGuard (LNot log)) fin2a;
+      new_edge beg (AGuard (erase_l log)) begi;
+      new_edge beg (AGuard (erase_l (LNot log))) fin2a;
       (* new_edge beg (ANone) begi2; *)
       new_edge fin2a AUnify fin;
       beg
@@ -453,31 +480,31 @@ let from_imp transformed tick_var impf =
       jmp *)
        (* counting divwarps without else *)
        let fin = create_switch_edge b fin b.IMP.b_end_p in
-      let beg = new_node pos in
-      let jmp = new_node b.IMP.b_end_p in
+      let beg = new_node (eol log) pos in
+      let jmp = new_node [] b.IMP.b_end_p in
       let begb = gob beg fin b in
-      let tick = create_pot_assign_edge tick_var
-                   (EAdd (EVar tick_var,
-                          EVar (CUDA_Config.div_cost)))
+      let tick = create_pot_assign_edge [] tick_var
+                   (mk () (EAdd (mk () (EVar tick_var),
+                          mk () (EVar (CUDA_Config.div_cost)))))
                    begb
                    pos
       in
-      new_edge jmp (ANotUnique (ref log)) tick;
+      new_edge jmp (ANotUnique (ref (erase_l log))) tick;
       new_edge beg ANone jmp;
-      new_edge jmp (AGuard log) begb;
-      new_edge jmp (AGuard (LNot log)) fin;
+      new_edge jmp (AGuard (erase_l log)) begb;
+      new_edge jmp (AGuard (erase_l (LNot log))) fin;
       beg
     | IMP.ILoop b ->
-      let jmp = new_node b.IMP.b_end_p in
+      let jmp = new_node [] b.IMP.b_end_p in
       let begb = gob jmp fin b in
       new_edge jmp ANone begb;
       begb
     | IMP.ICall idf ->
-      let beg = new_node pos in
+      let beg = new_node [] pos in
       new_edge beg (ACall idf) fin;
       beg
     | IMP.IProbIf (prob_e, bl, br) -> 
-      let beg = new_node pos in
+      let beg = new_node [] pos in
       let beg_bl = gob fin loo bl in
       let beg_br = gob fin loo br in
       let p1 = match prob_e with 
@@ -489,7 +516,7 @@ let from_imp transformed tick_var impf =
     | IMP.IReturn _ -> failwith "Return command should not happen"
     | IMP.ICallArg (rl, f, argl) -> failwith "Call with arguments should not happen"
     | IMP.ICallUninterp (ret, f, argl) ->
-       let beg = new_node pos in
+       let beg = new_node [] pos in
        new_edge beg (ACallUninterp (ret, f, argl)) fin;
        beg
 
@@ -499,14 +526,14 @@ let from_imp transformed tick_var impf =
       let fin = goil fin loo b in
       goi fin loo pos i
 
-  and gob fin loo { IMP.b_end_p; b_body } =
-    let beg = new_node b_end_p in
+  and gob fin loo ({ IMP.b_end_p; b_body } : 'a IMP.block) =
+    let beg = new_node [] b_end_p in
     new_edge beg ANone fin;
     goil beg loo b_body
 
   in
 
-  let g_end = new_node impf.fun_end_p in
+  let g_end = new_node [] impf.fun_end_p in
   let g_start = gob g_end (-1) impf.fun_body in
   let g_position = Array.make !next_node impf.fun_end_p in
   let g_edges = Array.make !next_node [] in
@@ -514,7 +541,11 @@ let from_imp transformed tick_var impf =
     g_position.(i) <- Hashtbl.find h_position i;
     g_edges.(i) <- Hashtbl.find_all h_edges i;
   done;
-  { impf with fun_body = { g_start; g_end; g_edges; g_position } }
+  ({ impf with fun_body = { g_start; g_end; g_edges; g_position } },
+   h_annots)
+
+let from_imp transformed tick_var impf =
+  fst (from_imp_with_annots transformed tick_var impf)
 
 let rpo_order gfunc =
   let g = gfunc.fun_body in
@@ -552,10 +583,11 @@ let add_loop_counter cnt gfunc =
   let gfunc = rpo_order gfunc in
   let g = gfunc.fun_body in
   let nnodes = Array.length g.g_edges in
-  let incs = ref [[AAssign (cnt, ref (ENum 0), ref false), g.g_start]] in
+  let incs = ref [[AAssign (cnt, ref (mk () (ENum 0)), ref false), g.g_start]]
+  in
   let nincs = ref 1 in
   let add_increment dst =
-    let e = ref (EAdd (ENum 1, EVar cnt)) in
+    let e = ref (mk () (EAdd (mk () (ENum 1), mk () (EVar cnt)))) in
     incs := [AAssign (cnt, e, ref false), dst] :: !incs;
     incr nincs;
     !nincs - 1 + nnodes
@@ -588,7 +620,8 @@ let add_loop_counter cnt gfunc =
 
 module type AbsInt = sig
   type absval
-  val analyze: dump:bool ->
+  val analyze: ?f:(Types.id * int -> absval -> unit) ->
+               dump:bool ->
                (CUDA_Cost.array_params * CUDA_Cost.cmetric) option ->
                (id list * func list) -> id ->
                (string, absval array) Hashtbl.t

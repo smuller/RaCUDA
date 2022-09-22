@@ -70,7 +70,7 @@ let interpret fe =
     | INum i ->
       let arg, l = getarg l in
       let arg = match arg with
-        | Types.FBase (Types.ENum n) -> n
+        | Types.FBase (_, Types.ENum n) -> n
         | _ ->
           Format.eprintf "%a: number expected as %s argument of %s@."
             Utils.print_position pos (nth n) fname;

@@ -315,17 +315,19 @@ let transform_callargs dump_blk globals func_l =
     with Failure _ -> false
   in
 
+  let evar x = mk () (EVar x) in
   (* transform callers *)
   let transform_caller fdes =     
     (* transform a call by adding assignments to registers and from return *)
-    let transform_a_call rts fn args = 
+    let transform_a_call rts fn args =
+
       let ins_l = ref [] in 
       let create_assignmet_to_reg i arg = 
         let assign_reg = 
           if (Hashtbl.mem h_regs i) then 
-            CSIAssign (Hashtbl.find h_regs i, EVar arg)
+            CSIAssign (Hashtbl.find h_regs i, evar arg)
           else
-            let reg = new_reg () in CSIAssign (reg, EVar arg)
+            let reg = new_reg () in CSIAssign (reg, evar arg)
         in
         ins_l := assign_reg :: !ins_l
       in
@@ -338,9 +340,9 @@ let transform_callargs dump_blk globals func_l =
       let create_assignmet_from_ret i rt = 
         let assign_ret = 
           if (Hashtbl.mem h_rets i) then
-            CSIAssign (rt, EVar (Hashtbl.find h_rets i))
+            CSIAssign (rt, evar (Hashtbl.find h_rets i))
           else
-            let ret = new_ret () in CSIAssign (rt, EVar ret)
+            let ret = new_ret () in CSIAssign (rt, evar ret)
         in
         ins_l := assign_ret :: !ins_l
       in 
@@ -385,9 +387,9 @@ let transform_callargs dump_blk globals func_l =
           let create_assignment_from_regs_util i arg = 
             let assign_reg = 
               if (Hashtbl.mem h_regs i) then 
-                CSIAssign (arg, EVar (Hashtbl.find h_regs i))
+                CSIAssign (arg, evar (Hashtbl.find h_regs i))
               else
-                let reg = new_reg () in CSIAssign (arg, EVar reg)
+                let reg = new_reg () in CSIAssign (arg, evar reg)
             in
             ins_l := assign_reg :: !ins_l
           in 
@@ -401,9 +403,9 @@ let transform_callargs dump_blk globals func_l =
       let create_assignment_to_rets_util i var_name = 
         let assign_ret = 
           if (Hashtbl.mem h_rets i) then 
-            CSIAssign (Hashtbl.find h_rets i, EVar var_name)
+            CSIAssign (Hashtbl.find h_rets i, evar var_name)
           else
-            let ret = new_ret () in CSIAssign (ret, EVar var_name)
+            let ret = new_ret () in CSIAssign (ret, evar var_name)
         in
         ins_l := assign_ret :: !ins_l  
       in

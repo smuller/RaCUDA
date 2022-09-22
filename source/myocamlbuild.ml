@@ -35,7 +35,6 @@ let flag_clp_byt = A "-custom" :: flag_clp_nat
 let () =
   dispatch begin function
              | After_rules ->
-                ocaml_lib ~extern:true ~dir: "/usr0/home/smuller/absynth/source/frontc" "frontc";
     (* Make OCaml files with flag use_clp depend on Clp_Stubs.o. *)
     dep ["compile"; "ocaml"; "use_clp"] [clp_stubs];
 
@@ -50,6 +49,8 @@ let () =
     flag ["link"; "ocaml"; "byte"; "use_apron"] (S flag_apron_byt);
     flag ["link"; "ocaml"; "native"; "use_clp"] (S flag_clp_nat);
     flag ["link"; "ocaml"; "byte"; "use_clp"] (S flag_clp_byt);
+    flag ["only_tokens"] (S [A "--only-tokens"]);
+    flag ["use_tokens"] (S [A "--base"; A "frontc/cparser"; A "--external-tokens"; A "Ctokens"; A "frontc/ctokens.mly"]);
 
     rule "Create configuration file" ~prod:"Config.ml"
       begin fun _env _build ->
