@@ -427,18 +427,29 @@ and print_args fmt l =
   | [x] -> print_cexpr fmt x
   | a::t -> fprintf fmt "%a,@ %a" print_cexpr a print_args t
 and print_cexpr fmt e =
-  match edesc e with
+  let paren_helper binop e1 e2= 
+    match edesc e1 with 
+    | CL _|CConst _|CParam _ -> 
+      (match edesc e2 with 
+      | CL _|CConst _|CParam _ -> (fprintf fmt "@[@[%a@]@ %s @[%a@]@]" print_cexpr e1 binop print_cexpr e2)
+      | _ ->  (fprintf fmt "@[@[%a@]@ %s @[(%a)@]@]" print_cexpr e1 binop print_cexpr e2)
+      )
+    | _ -> 
+      (match edesc e2 with 
+      | CL _|CConst _|CParam _ -> (fprintf fmt "@[@[(%a)@]@ %s @[%a@]@]" print_cexpr e1 binop print_cexpr e2)
+      | _ ->  (fprintf fmt "@[@[(%a)@]@ %s @[(%a)@]@]" print_cexpr e1 binop print_cexpr e2)
+      )
+  in match edesc e with
   | CL v -> print_clval fmt v
   | CConst c -> print_const fmt c
   | CParam p -> print_param fmt p
-  | CAdd (e1, e2) -> fprintf fmt "@[@[(%a)@]@ + @[(%a)@]@]" print_cexpr e1 print_cexpr e2
-  | CSub (e1, e2) -> fprintf fmt "@[@[(%a)@]@ - @[(%a)@]@]" print_cexpr e1 print_cexpr e2
-  | CMul (e1, e2) -> fprintf fmt "@[@[%a@]@ * @[%a@]@]" print_cexpr e1 print_cexpr e2
-  | CDiv (e1, e2) -> fprintf fmt "@[@[%a@]@ / @[%a@]@]" print_cexpr e1 print_cexpr e2
-  | CMod (e1, e2) -> fprintf fmt "@[@[%a@]@ %% @[%a@]@]" print_cexpr e1 print_cexpr e2
+  | CAdd (e1, e2) -> paren_helper "+" e1 e2
+  | CSub (e1, e2) -> paren_helper "-" e1 e2
+  | CMul (e1, e2) -> paren_helper "*" e1 e2
+  | CDiv (e1, e2) -> paren_helper "/" e1 e2
+  | CMod (e1, e2) -> paren_helper "%%" e1 e2
   | CCall (s, args) ->
      fprintf fmt "@[%s(%a)@]" s print_args args
-
 let rec print_clogic fmt l =
   let string_of_op = function Eq -> "==" | Le -> "<=" | Lt -> "<"
                               | Gt -> ">" | Ge -> ">=" | Ne -> "!="
@@ -619,6 +630,12 @@ and get_operator exp =
    | C.VOLATILE typ -> print_pointer typ ^ " volatile "
    | C.ARRAY (typ, _) -> print_pointer typ *)
 
+
+let print_for_ending fmt i =
+   match i with
+   | CAssign(lv, e, _) -> fprintf fmt "@[<h>%a =@ %a@]" print_clval lv print_cexpr e
+   | _ -> fprintf fmt "error"
+
 let rec print_cinstr fmt i =
   match i with
   | CBreak -> ps fmt "break;"
@@ -640,7 +657,7 @@ let rec print_cinstr fmt i =
                            "@[<v>@[<h>for (%a@ %a;@ %a)@ {@]@,%a @ }@]"
                              print_instr_list s1
                              print_clogic l
-                             print_instr_list s2
+                             print_for_ending (List.hd s2)
                              print_cblock s
   | CReturn e -> fprintf fmt "return %a;" print_cexpr e
   | CSync -> fprintf fmt "__syncthreads()"

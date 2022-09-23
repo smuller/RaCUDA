@@ -565,7 +565,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
 
 
-let uniq_cons x xs = if List.mem x xs then xs else x :: xs
+let uniq_cons x xs = let (x_id, _, _) = x in if List.mem x_id (List.map (fun (x_id, _, _) -> x_id) xs) then xs else x :: xs
 
 let remove_from_right xs = List.fold_right uniq_cons xs []
 let global_to_shared (t, id, params, block, b): 'a cfunc =
@@ -601,7 +601,7 @@ let global_to_shared (t, id, params, block, b): 'a cfunc =
   in let rec find_array_reads block = 
     let rec find_array_reads_clval clv = (match clv with
       | CVar id -> []
-      | CArr (CVar(id), cexprs) -> (process_bounds id !(ann (List.hd cexprs))) @ List.flatten (List.map find_array_reads_cexpr cexprs)
+      | CArr (CVar(id), cexprs) ->(process_bounds id !(ann (List.hd cexprs))) @ List.flatten (List.map find_array_reads_cexpr cexprs)
       | CDeref cl -> find_array_reads_clval cl
       | CRef cl -> find_array_reads_clval cl
       | _ -> []
@@ -626,7 +626,7 @@ let global_to_shared (t, id, params, block, b): 'a cfunc =
     (match block with
     | [] -> []
     | cinst :: rest -> (match cinst with
-      | CAssign(clv, ex1, _) -> let _ = CUDA.print_cinstr Format.std_formatter cinst in let _ = Format.print_newline () in find_array_reads_cexpr ex1 @ find_array_reads rest
+      | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest
       | CIf(cl, (_, cb1), (_, cb2)) -> find_array_reads_clogic cl @ find_array_reads cb1 @ find_array_reads cb2 @ find_array_reads rest
       | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb @ find_array_reads rest
       | CFor (cinsts, cl, cinsts1, (_, cb)) -> find_array_reads cinsts @ find_array_reads_clogic cl @ find_array_reads cinsts1 @ find_array_reads cb @ find_array_reads rest
@@ -649,96 +649,113 @@ let global_to_shared (t, id, params, block, b): 'a cfunc =
     | (C.ARRAY (b_t, exp), Some i) -> CArr(param_to_clval (id, b_t) ind, [i])
     | _ -> CVar id
 
-  in let param_names = List.map (fst) params 
-  in let rec rename_clval (c: 'a clval): 'a clval = 
-    (match c with
-    | CVar id -> CVar(if List.mem id param_names then (id ^ "_2") else id)
-    | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
-    | CDeref clv -> CDeref(rename_clval clv)
-    | CRef clv -> CRef(rename_clval clv)
-    )
-     and rename_cexpr (exp: 'a cexpr): 'a cexpr =
-       emk ()
-    (match edesc exp with 
-    | CL clv -> CL(rename_clval clv)
-    | CAdd(exp1, exp2) -> CAdd(rename_cexpr exp1, rename_cexpr exp2)
-    | CSub(exp1, exp2) -> CSub(rename_cexpr exp1, rename_cexpr exp2)
-    | CMul(exp1, exp2) -> CMul(rename_cexpr exp1, rename_cexpr exp2)
-    | CDiv(exp1, exp2) -> CDiv(rename_cexpr exp1, rename_cexpr exp2)
-    | CMod(exp1, exp2) -> CMod(rename_cexpr exp1, rename_cexpr exp2)
-    | CCall(st, exps) -> CCall(st, List.map rename_cexpr exps)
-    | ed -> ed
-    )
+  in let is_param_bt_not_array param =
+    let (_, bt) = param in
+    match bt with
+    | C.PTR _ | C.ARRAY _ -> false
+    | _ -> true
 
-  and rename_clogic (cl: 'a clogic): 'a clogic = 
-    (match cl with
-    | CCmp(exp1, cmp, exp2) -> CCmp(rename_cexpr exp1, cmp, rename_cexpr exp2)
-    | CAnd(cl1, cl2) -> CAnd(rename_clogic cl1, rename_clogic cl2)
-    | COr(cl1, cl2) -> COr(rename_clogic cl1, rename_clogic cl2)
-    | CNot cl1 -> CNot(rename_clogic cl1)
-    )
-  and rename_cinstr (code_instr: 'a cinstr): 'a cinstr =  
-    match code_instr with
-    | CAssign(cl, ce, b) -> CAssign(rename_clval cl, rename_cexpr ce, b)
-    | CIf(cl, cb1, cb2) ->
-       CIf(rename_clogic cl, rename_cblock cb1,
-           rename_cblock cb2)
-    | CWhile(cl, cb) -> CWhile(rename_clogic cl, rename_cblock cb)
-    | CFor(cb1, cl, cb2, cb3) ->
-       CFor(List.map rename_cinstr cb1, rename_clogic cl,
-            List.map rename_cinstr cb2, rename_cblock cb3)
-    | CReturn(ce) -> CReturn(rename_cexpr ce)
-    | _ -> code_instr
-  and rename_cblock (a, block) =
-    (a, List.map rename_cinstr block)
-
-
+  (* in let param_names = List.map (fst) params  *)
      in let shared_back_to_global (id, t) =
           (CAssign ((param_to_clval (id, t) None),
                     (emk () (CL (param_to_clval (id ^ "_2", t) None))) ,true))
                     
 
-        in let global_convert_to_shared ((id, lb, ub), t) =
-             let tvar = CVar("__itertemp") in
-             let tvar_as_exp =
-               emk () (CL (CVar "__itertemp"))
-             in
-             let _ = Format.print_newline () in
-             let _ = print_string "Here is the ub \n\n\n" in  
-             let _ = CUDA.print_cexpr Format.std_formatter (expr_eval ub) in
-             let _ = print_string "Here is the non-expr ub \n\n\n" in  
-             let _ = CUDA.print_cexpr Format.std_formatter ub in
-             let _ = Format.print_newline () in  
-             (CFor ([CDecl ("__itertemp", Local, C.INT(C.LONG, C.SIGNED), []);
-                     CAssign (tvar, expr_eval lb, true)],
-                    CCmp (tvar_as_exp, Le, expr_eval ub),
-                    [CAssign (tvar, emk () (CAdd (tvar_as_exp,
-                                            (emk () (CConst (CInt 1))))), true)],
-                    ((),
-                     [(CAssign ((param_to_clval (id ^ "_2", t)
-                                (Some tvar_as_exp)
-                                ),
-                                (emk () (CL (param_to_clval (id, t)
-                                               (Some tvar_as_exp)))) ,true))])))
-
-     in
-     let (a, bl) = let (_, block) = block in rename_cblock (emk () (List.map erase_instr block)) in
-     let arrs =
-      let get_param_bounds params = 
-        let param_ids = List.map (fun (id, _) -> id) params in 
-        let bounds_info = List.filter (fun (id, _, _) -> List.mem id param_ids ) (remove_from_right (arrayReads @ arrayWrites)) in
-        (* let _ = print_string (String.concat ", " param_ids) in 
-        let _ =  CUDA.print_id_with_bounds_list Format.std_formatter (remove_from_right (arrayReads @ arrayWrites)) in
-        let _ = Format.print_newline () in  *)
-        List.map (fun (id, lb, ub) -> (let _ = print_string id in let (_, bt) = List.find (fun (x, _) -> x = id) params in ((id, lb, ub), bt))) bounds_info 
-     in
- 
-      (t, id, params, (a, 
-                       (List.map param_to_cdecl params) 
-                      @ (List.map global_convert_to_shared (get_param_bounds params))
-                      @ bl
-                      @ (List.map shared_back_to_global params)), b)
-      in arrs
+                  in let global_convert_to_shared ((id, lb, ub), t) =
+                    let tvar = CVar("__itertemp") in
+                    let tvar_as_exp =
+                      emk () (CL (CVar "__itertemp"))
+                    in
+                    (* let _ = Format.print_newline () in
+                    let _ = print_string "Here is the ub \n\n\n" in  
+                    let _ = CUDA.print_cexpr Format.std_formatter (expr_eval ub) in
+                    let _ = print_string "Here is the non-expr ub \n\n\n" in  
+                    let _ = CUDA.print_cexpr Format.std_formatter (ub) in
+                    let _ = Format.print_newline () in *)
+                    [
+                      CDecl ("upper_bound_" ^ id, Local, C.INT(C.LONG, C.SIGNED), []);
+                      CDecl ("lower_bound_" ^ id, Local, C.INT(C.LONG, C.SIGNED), []);
+                      CAssign(CVar("upper_bound_" ^ id), expr_eval ub, true);
+                      CAssign(CVar("lower_bound_" ^ id), expr_eval lb, true);
+                      (CFor ([CDecl ("__itertemp", Local, C.INT(C.LONG, C.SIGNED), []);
+                              CAssign (tvar, emk() (CL((CDeref(CVar("lower_bound_" ^ id))))), true)],
+                              CCmp (tvar_as_exp, Le, emk() (CL((CDeref(CVar("upper_bound_" ^ id)))))),
+                              [CAssign (tvar, emk () (CAdd (tvar_as_exp,
+                                                      (emk () (CConst (CInt 1))))), true)],
+                              ((),
+                              [(CAssign ((param_to_clval (id ^ "_2", t)
+                                          (Some tvar_as_exp)
+                                          ),
+                                          (emk () (CL (param_to_clval (id, t)
+                                                        (Some tvar_as_exp)))) ,true))])))
+                    ]
+             
+                  in let get_param_bounds params = 
+                    let param_ids = List.map (fun (id, _) -> id) params in 
+                    let bounds_info = List.filter (fun (id, _, _) -> List.mem id param_ids ) (remove_from_right (arrayReads @ arrayWrites)) in
+                    (* let _ = print_string ("Array Reads: ") in
+                    let _ = print_string (String.concat ", " (List.map (fun (x, _, _) -> x) arrayReads)) in
+                    let _ = print_string ("Array Writes: ") in
+                    let _ = print_string (String.concat ", " (List.map (fun (x, _, _) -> x) arrayWrites)) in *)
+                    (* let _ =  CUDA.print_id_with_bounds_list Format.std_formatter (remove_from_right (arrayReads @ arrayWrites)) in
+                    let _ = Format.print_newline () in *)
+                    (* List.map (fun (id, lb, ub) -> (let _ = print_string id in let (_, bt) = List.find (fun (x, _) -> x = id) params in ((id, lb, ub), bt))) bounds_info  *)
+                    List.map (fun (id, lb, ub) -> (let (_, bt) = List.find (fun (x, _) -> x = id) params in ((id, lb, ub), bt))) bounds_info 
+                 in
+                 let param_bounds = get_param_bounds params in
+                 let param_bound_ids_bt = List.map (fun ((id, _, _), bt) -> (id, bt)) param_bounds in
+                 let non_array_params = List.filter is_param_bt_not_array params in
+                 let non_array_param_ids =  List.map (fun (id, _) -> id) (non_array_params) in
+                 let rec rename_clval (c: 'a clval): 'a clval = 
+                  (match c with
+                  | CVar id -> CVar(if List.mem id (non_array_param_ids @ List.map (fun (id, _) -> id) param_bound_ids_bt) then (id ^ "_2") else id)
+                  | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
+                  | CDeref clv -> CDeref(rename_clval clv)
+                  | CRef clv -> CRef(rename_clval clv)
+                  )
+                   and rename_cexpr (exp: 'a cexpr): 'a cexpr =
+                     emk ()
+                  (match edesc exp with 
+                  | CL clv -> CL(rename_clval clv)
+                  | CAdd(exp1, exp2) -> CAdd(rename_cexpr exp1, rename_cexpr exp2)
+                  | CSub(exp1, exp2) -> CSub(rename_cexpr exp1, rename_cexpr exp2)
+                  | CMul(exp1, exp2) -> CMul(rename_cexpr exp1, rename_cexpr exp2)
+                  | CDiv(exp1, exp2) -> CDiv(rename_cexpr exp1, rename_cexpr exp2)
+                  | CMod(exp1, exp2) -> CMod(rename_cexpr exp1, rename_cexpr exp2)
+                  | CCall(st, exps) -> CCall(st, List.map rename_cexpr exps)
+                  | ed -> ed
+                  )
+              
+                and rename_clogic (cl: 'a clogic): 'a clogic = 
+                  (match cl with
+                  | CCmp(exp1, cmp, exp2) -> CCmp(rename_cexpr exp1, cmp, rename_cexpr exp2)
+                  | CAnd(cl1, cl2) -> CAnd(rename_clogic cl1, rename_clogic cl2)
+                  | COr(cl1, cl2) -> COr(rename_clogic cl1, rename_clogic cl2)
+                  | CNot cl1 -> CNot(rename_clogic cl1)
+                  )
+                and rename_cinstr (code_instr: 'a cinstr): 'a cinstr =  
+                  match code_instr with
+                  | CAssign(cl, ce, b) -> CAssign(rename_clval cl, rename_cexpr ce, b)
+                  | CIf(cl, cb1, cb2) ->
+                     CIf(rename_clogic cl, rename_cblock cb1,
+                         rename_cblock cb2)
+                  | CWhile(cl, cb) -> CWhile(rename_clogic cl, rename_cblock cb)
+                  | CFor(cb1, cl, cb2, cb3) ->
+                     CFor(List.map rename_cinstr cb1, rename_clogic cl,
+                          List.map rename_cinstr cb2, rename_cblock cb3)
+                  | CReturn(ce) -> CReturn(rename_cexpr ce)
+                  | _ -> code_instr
+                and rename_cblock (a, block) =
+                  (a, List.map rename_cinstr block) in
+                  let (a, bl) = let (_, block) = block in rename_cblock (emk () (List.map erase_instr block)) in
+                  let arrs =
+                   (* let _ = print_string (String.concat ", " (List.map (fun ((id, _, _) , _) -> id) (get_param_bounds params))) in *)
+                   (t, id, params, (a, 
+                                    (List.map param_to_cdecl (param_bound_ids_bt @ non_array_params)) 
+                                   @ List.flatten (List.map global_convert_to_shared (get_param_bounds params))
+                                   @ bl
+                                   @ (List.map shared_back_to_global (param_bound_ids_bt @ non_array_params))), b)
+                   in arrs
 
 
 
