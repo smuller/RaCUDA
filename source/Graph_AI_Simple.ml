@@ -468,6 +468,12 @@ let bounds abs pe =
     
   let bounds_gen abs pe =
     let open CUDA_Types in
+    let filter_bds f (_, b) =
+      let vars = L.vars Presburger.S.empty b in
+      Presburger.S.for_all
+        (fun v -> is_param v
+                  || Factor.var_exists (fun v' -> v' = v) f) vars
+    in
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
     let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
     let cconst e = emk () (CConst e) in
@@ -488,8 +494,12 @@ let bounds abs pe =
                   else
                     (Format.fprintf Format.std_formatter "Finding bounds for %a\n"
                        Factor.print f;
-                      match bounds abs
-                           (Poly.of_monom (Monom.of_factor f e) 1.0)
+                     let (lbs, ubs) =
+                       bounds abs
+                         (Poly.of_monom (Monom.of_factor f e) 1.0)
+                     in
+                     match (List.filter (filter_bds f) lbs,
+                            List.filter (filter_bds f) ubs)
                    with
                    | (lb'::olbs, ub'::_) ->
                       if is_nonneg_lbs (lb'::olbs)
