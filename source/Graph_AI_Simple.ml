@@ -371,8 +371,65 @@ let bd_to_CUDA neg (k, l) =
     emk () (CMul (Presburger.L.toCUDA l, emk () (CConst (CInt ~-1))))
   else
     emk () (CDiv (Presburger.L.toCUDA l, emk () (CConst (CInt k))))
-    
-  let is_nonneg (abs, _, _, _) pol =
+
+let bd_to_poly neg (k, l) =
+  let module P = Polynom.Poly in
+  let k = if neg then ~-k else k in
+  P.scale (1. /. (float_of_int k)) (Presburger.L.toPoly l)
+
+let factor_to_CUDA f =
+  let open CUDA_Types in
+  match f with
+  | Factor.Var v -> Some (emk () (CL (CVar v)))
+  | Factor.Max _ -> None
+
+let monom_to_CUDA m =
+  let open CUDA_Types in
+  Polynom.Monom.fold
+    (fun f ex (c: 'a option) ->
+      match c with
+      | None -> None
+      | Some c ->
+         if ex = 0 then Some c
+         else if ex = 1 then
+           (match factor_to_CUDA f with
+            | Some c' -> Some (emk () (CMul (c', c)))
+            | None -> None)
+         else
+    (* Don't support exponents yet *)
+           None
+    )
+    m
+    (Some (emk () (CConst (CInt 1))) : 'a option)
+let poly_to_CUDA p =
+  let open CUDA_Types in
+  Polynom.Poly.fold
+    (fun m x c ->
+      match c with
+      | None -> None
+      | Some c ->
+         let xi = int_of_float x in
+         if abs_float ((float_of_int xi) -. x) < 0.0001 then
+           (match monom_to_CUDA m with
+              Some cm ->
+              Some (emk ()
+                      (CAdd (emk () (CMul (cm,
+                                           (emk () (CConst (CInt xi))))),
+                             c)
+                      )
+                )
+            | None -> None
+           )
+         else
+           (* Don't support floats *)
+           None
+    )
+    p
+    (Some (emk () (CConst (CInt 0))))
+         
+  
+
+let is_nonneg (abs, _, _, _) pol =
   if Poly.degree pol > 1 then false else
   let l = L.mult (-1) (Translate.linear_of_poly pol) in
   List.exists (L.eq l) abs || Presburger.implies abs l
@@ -477,6 +534,7 @@ let bounds abs pe =
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
     let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
     let cconst e = emk () (CConst e) in
+    match
     Poly.fold (fun m k ->
         function
           None -> None
@@ -490,7 +548,8 @@ let bounds abs pe =
                   then
                     let v = factor_var f in
                     let _ = Printf.printf "Using %s\n" v in
-                    Some (emk () (CL (CVar v)), emk () (CL (CVar v)))
+                    Some (Poly.of_monom (Monom.of_var v) 1.0,
+                          Poly.of_monom (Monom.of_var v) 1.0)
                   else
                     (Format.fprintf Format.std_formatter "Finding bounds for %a\n"
                        Factor.print f;
@@ -504,33 +563,41 @@ let bounds abs pe =
                    | (lb'::olbs, ub'::_) ->
                       if is_nonneg_lbs (lb'::olbs)
                          || e mod 2 = 0 then
-                        let (clb, cub) = (bd_to_CUDA false lb',
-                                          bd_to_CUDA true ub')
+                        let (plb, pub) = (bd_to_poly false lb',
+                                          bd_to_poly true ub')
                         in
+                        (*
                         let _ = Format.fprintf Format.std_formatter
                                   "lb: %a\nub: %a\n"
-                                  CUDA.print_cexpr clb
-                                  CUDA.print_cexpr cub
+                                  Poly.print plb
+                                  Poly.print pub
                         in
-                        Some (emk () (CMul (lb, clb)), emk () (CMul (ub, cub)))
+                         *)
+                        Some (Poly.mul lb plb, Poly.mul ub pub)
                       else
                         (Format.fprintf Format.std_formatter "Negative lb\n"; None)
                    | _ ->
                       (Format.fprintf Format.std_formatter "No bounds\n"; None))
              )
              m
-             (Some (cconst (CInt 1), cconst (CInt 1)))
+             (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
            with
            | None -> None
            | Some (lb', ub') ->
-              Some (cadd (lb, cmul (cconst (CFloat k), lb')),
-                    cadd (ub, cmul (cconst (CFloat k), ub')))
+              Some (Poly.add lb (Poly.scale k lb'),
+                    Poly.add ub (Poly.scale k ub'))
            )
       )
       pe
-      (Some (cconst (CInt 1), cconst (CInt 1)))
-             
-                        
+      (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
+    with
+    | Some (plb, pub) ->
+       (match (poly_to_CUDA plb, poly_to_CUDA (Poly.sub pub plb))
+        with
+        | (Some clb, Some cdiff) -> Some (clb, cdiff)
+        | _ -> None)
+    | None -> None
+
   let make_fpmanager graph widening apply =
     let info = PSHGraph.info graph in
     let dont_print _ _ = () in
