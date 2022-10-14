@@ -79,7 +79,7 @@ module L = struct
         (sign first k) (abs k)
     else if first then
       fprintf fmt "0"
-
+    
   let toCUDA {m; k} =
     let open CUDA_Types in
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
@@ -89,6 +89,13 @@ module L = struct
     fold (fun x c e -> cadd (e, cmul (cl (CVar x), cconst (CInt c))))
       m
       (cconst (CInt k))
+
+  let toPoly {m; k} =
+    let module P = Polynom.Poly in
+    fold (fun x c p -> P.add_monom (Polynom.Monom.of_var x) (float_of_int c) p)
+      m
+      (P.const (float_of_int k))
+    
 
   let print_as_coq varname fmt {m; k} =
     let open Format in
