@@ -412,6 +412,9 @@ let poly_to_CUDA p =
          if abs_float ((float_of_int xi) -. x) < 0.0001 then
            (match monom_to_CUDA m with
               Some cm ->
+               if xi = 1 then
+                 Some (emk () (CAdd (cm, c)))
+               else
               Some (emk ()
                       (CAdd (emk () (CMul (cm,
                                            (emk () (CConst (CInt xi))))),
@@ -442,9 +445,15 @@ module Solver = struct
    *)
 
   let is_param id =
+    let is_reg n =
+      match desc (CUDA.lookup_var ("_reg_" ^ (string_of_int n))) with
+      | EVar x -> x = id
+      | _ -> false
+    in
     let b = List.mem id CUDA_Config.cuda_vars ||
               (String.length id > 7 && String.sub id 0 7 = "__param") ||
-                (String.length id > 5 && String.sub id 0 5 = "_reg_")
+                (String.length id > 5 && String.sub id 0 5 = "_reg_") ||
+                  List.exists is_reg [0; 1; 2; 3; 4; 5; 6; 7; 8; 9]
     in
     b
     
@@ -534,6 +543,9 @@ let bounds abs pe =
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
     let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
     let cconst e = emk () (CConst e) in
+    let _ = Format.fprintf Format.std_formatter "bounds_gen %a\n"
+              Poly.print pe
+    in
     match
     Poly.fold (fun m k ->
         function
@@ -548,8 +560,8 @@ let bounds abs pe =
                   then
                     let v = factor_var f in
                     let _ = Printf.printf "Using %s\n" v in
-                    Some (Poly.of_monom (Monom.of_var v) 1.0,
-                          Poly.of_monom (Monom.of_var v) 1.0)
+                    Some (Poly.mul lb (Poly.of_monom (Monom.of_var v) 1.0),
+                          Poly.mul ub (Poly.of_monom (Monom.of_var v) 1.0))
                   else
                     (Format.fprintf Format.std_formatter "Finding bounds for %a\n"
                        Factor.print f;
@@ -557,6 +569,10 @@ let bounds abs pe =
                        bounds abs
                          (Poly.of_monom (Monom.of_factor f e) 1.0)
                      in
+                     Format.fprintf Format.std_formatter "%d lbs, %d ubs\n"
+                       (List.length lbs)
+                       (List.length ubs);
+                     
                      match (List.filter (filter_bds f) lbs,
                             List.filter (filter_bds f) ubs)
                    with
@@ -566,18 +582,15 @@ let bounds abs pe =
                         let (plb, pub) = (bd_to_poly false lb',
                                           bd_to_poly true ub')
                         in
-                        (*
                         let _ = Format.fprintf Format.std_formatter
                                   "lb: %a\nub: %a\n"
                                   Poly.print plb
                                   Poly.print pub
                         in
-                         *)
                         Some (Poly.mul lb plb, Poly.mul ub pub)
                       else
                         (Format.fprintf Format.std_formatter "Negative lb\n"; None)
-                   | _ ->
-                      (Format.fprintf Format.std_formatter "No bounds\n"; None))
+                   | _ -> None)
              )
              m
              (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
@@ -594,9 +607,14 @@ let bounds abs pe =
     | Some (plb, pub) ->
        (match (poly_to_CUDA plb, poly_to_CUDA (Poly.sub pub plb))
         with
-        | (Some clb, Some cdiff) -> Some (clb, cdiff)
-        | _ -> None)
-    | None -> None
+        | (Some clb, Some cdiff) ->
+           (Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\ndiff: %a\n"
+              Poly.print pe
+              CUDA.print_cexpr clb
+              CUDA.print_cexpr cdiff;
+            Some (clb, cdiff))
+        | _ -> Format.fprintf Format.std_formatter "None\n"; None)
+    | None -> (Format.fprintf Format.std_formatter "None\n"; None)
 
   let make_fpmanager graph widening apply =
     let info = PSHGraph.info graph in
