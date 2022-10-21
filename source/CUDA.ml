@@ -636,31 +636,36 @@ let print_for_ending fmt i =
    | CAssign(lv, e, _) -> fprintf fmt "@[<h>%a =@ %a@]" print_clval lv print_cexpr e
    | _ -> fprintf fmt "error"
 
-let rec print_cinstr fmt i =
-  match i with
-  | CBreak -> ps fmt "break;"
-  | CDecl (id, mem, b_type, _) -> (match mem with
-                                  | Local -> fprintf fmt "%s;" (string_of_base_type b_type id) 
-                                  | _ -> fprintf fmt "%s %s;" (string_of_mem mem) (string_of_base_type b_type id) )
-  | CAssign (lv, e, free) ->
-     fprintf fmt "@[<h>%a =@ %a;@]" print_clval lv
-       (* (if free then "0" else "") *)
-       print_cexpr e
-  | CIf (l, s1, s2) -> fprintf fmt "@[<v>@[<h>if (%a)@ {@]@ %a@ }@[<h> else@ {@]@ %a @ } @]"
-                         print_clogic l
-                         print_cblock s1
-                         print_cblock s2
-  | CWhile (l, s) -> fprintf fmt "@[<v>@[<h>while (%a)@ {@]@ %a @ }@]"
-                       print_clogic l
-                       print_cblock s
-  | CFor (s1, l, s2, s) -> fprintf fmt
-                           "@[<v>@[<h>for (%a@ %a;@ %a)@ {@]@,%a @ }@]"
-                             print_instr_list s1
+   let rec print_cinstr fmt i =
+      match i with
+      | CBreak -> ps fmt "break;"
+      | CDecl (id, mem, b_type, _) -> (match mem with
+                                      | Local -> fprintf fmt "%s;" (string_of_base_type b_type id) 
+                                      | _ -> fprintf fmt "%s %s;" (string_of_mem mem) (string_of_base_type b_type id) )
+      | CAssign (lv, e, free) ->
+         fprintf fmt "@[<h>%a =@ %a;@]" print_clval lv
+           (* (if free then "0" else "") *)
+           print_cexpr e
+      | CIf (l, s1, s2) -> fprintf fmt "@[<v>@[<h>if (%a)@ {@]@ %a@ }@[<h> else@ {@]@ %a @ } @]"
                              print_clogic l
-                             print_for_ending (List.hd s2)
-                             print_cblock s
-  | CReturn e -> fprintf fmt "return %a;" print_cexpr e
-  | CSync -> fprintf fmt "__syncthreads()"
+                             print_cblock s1
+                             print_cblock s2
+      | CWhile (l, s) -> fprintf fmt "@[<v>@[<h>while (%a)@ {@]@ %a @ }@]"
+                           print_clogic l
+                           print_cblock s
+      | CFor (s1, l, s2, s) -> fprintf fmt
+                               "@[<v>@[<h>for (%a@ %a;@ %a)@ {@]@,%a @ }@]"
+                                 print_for_decl s1
+                                 print_clogic l
+                                 print_for_ending (List.hd s2)
+                                 print_cblock s
+      | CReturn e -> fprintf fmt "return %a;" print_cexpr e
+      | CSync -> fprintf fmt "__syncthreads()"
+    
+    and print_for_decl fmt l =
+       match l with
+       | CDecl(id, mem, b_type, _)::CAssign(lv, e, free)::rest -> fprintf fmt "@[<h>%s = @ %a;@]" (string_of_base_type b_type id) print_cexpr e
+       | _ -> fprintf fmt "nothing!"
 
 and print_instr_list fmt l =
   (* List.iter (fun i -> printf "%a@;" print_cinstr i) l *)
