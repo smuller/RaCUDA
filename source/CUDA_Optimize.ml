@@ -713,7 +713,7 @@ in let global_convert_to_shared ((id, lb, ub), t) =
             let non_array_param_ids =  List.map (fun (id, _) -> id) (non_array_params) in
             let rec rename_clval (c: 'a clval): 'a clval = 
              (match c with
-             | CVar id -> CVar(if List.mem id (non_array_param_ids @ List.map (fun (id, _) -> id) param_bound_ids_bt) then (id ^ "_2") else id)
+             | CVar id -> CVar(if List.mem id (List.map (fun (id, _) -> id) param_bound_ids_bt) then (id ^ "_2") else id)
              | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
              | CDeref clv -> CDeref(rename_clval clv)
              | CRef clv -> CRef(rename_clval clv)
@@ -756,10 +756,9 @@ in let global_convert_to_shared ((id, lb, ub), t) =
              let arrs =
               (* let _ = print_string (String.concat ", " (List.map (fun ((id, _, _) , _) -> id) (get_param_bounds params))) in *)
               (t, id, params, (a, 
-                               (List.map param_to_cdecl (non_array_params)) 
-                              @ List.flatten (List.map global_convert_to_shared (get_param_bounds params))
+                               List.flatten (List.map global_convert_to_shared (get_param_bounds params))
                               @ bl
-                              @ (List.map shared_back_to_global (param_bound_ids_bt @ non_array_params))), b)
+                              @ (List.map shared_back_to_global (param_bound_ids_bt))), b)
               in arrs
 
 
