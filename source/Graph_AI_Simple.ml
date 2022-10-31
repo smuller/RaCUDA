@@ -602,7 +602,7 @@ let bounds abs pe =
            )
       )
       pe
-      (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
+      (Some (Poly.zero (), Poly.zero ()))
     with
     | Some (plb, pub) ->
        (match (poly_to_CUDA plb, poly_to_CUDA (Poly.sub pub plb))
