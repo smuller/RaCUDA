@@ -564,6 +564,12 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     ) @ find_array_ids vctx p m (annot, rest)
 
 
+  (* This is to determine the original base type of the pointer, so we can convert it to an array *)
+  let get_pointer_bt t = 
+    match t with
+    | C.ARRAY(bt, expr) -> bt
+    | C.PTR bt -> bt
+    | _ -> t
 
 let uniq_cons x xs = let (x_id, _, _) = x in if List.mem x_id (List.map (fun (x_id, _, _) -> x_id) xs) then xs else x :: xs
 
@@ -667,8 +673,20 @@ match bt with
 
 (* in let param_names = List.map (fst) params  *)
 in let shared_back_to_global (id, t) =
-     (CAssign ((param_to_clval (id, t, Some (emk () (CConst(CInt(0))))) None),
-               (emk () (CL (param_to_clval (id ^ "_2", t, Some (emk () (CConst(CInt(0))))) None))) ,true))
+  let tvar = CVar("__itertemp") in
+  let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
+  let pointer_bt = get_pointer_bt t in
+    (CFor ([CDecl ("__itertemp", Local, C.INT(C.LONG, C.SIGNED), []);
+    CAssign (tvar, emk() (CConst(CInt 0)), true)],
+    CCmp (tvar_as_exp, Le, emk() (CL((CVar("size_" ^ id))))),
+    [CAssign (tvar, emk () (CAdd (tvar_as_exp,
+                            (emk () (CConst (CInt 1))))), true)],
+    ((),                              
+    [(CAssign ((param_to_clval (id, t, Some (emk () (CAdd(emk () (CL(CVar("__itertemp"))), emk () (CL(CVar("lower_bound_" ^ id)))))))
+                (Some tvar_as_exp)
+                ),
+                (emk () (CL (param_to_clval (id ^ "_2", t, Some (emk () (CAdd(emk () (CL(CVar("__itertemp"))), emk () (CL(CVar("lower_bound_" ^ id)))))))
+                              (Some tvar_as_exp)))) ,true))])))
     
 (* This is responsible for the for loop that copies from the parameter to shared memory *)
 in let global_convert_to_shared ((id, lb, ub), t) =
@@ -711,13 +729,17 @@ in let global_convert_to_shared ((id, lb, ub), t) =
             let param_bound_ids_bt = List.map (fun ((id, _, _), bt) -> (id, bt)) param_bounds in
             let non_array_params = List.filter is_param_bt_not_array params in
             let non_array_param_ids =  List.map (fun (id, _) -> id) (non_array_params) in
+            (* rename_clval also changes the array accesses of the new shared arrays to subtract the lower bound *)
             let rec rename_clval (c: 'a clval): 'a clval = 
-             (match c with
-             | CVar id -> CVar(if List.mem id (non_array_param_ids @ List.map (fun (id, _) -> id) param_bound_ids_bt) then (id ^ "_2") else id)
-             | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
-             | CDeref clv -> CDeref(rename_clval clv)
-             | CRef clv -> CRef(rename_clval clv)
-             )
+              (match c with
+              | CArr(CVar id, fst_exp :: rest_exp_lst) -> if List.mem id (List.map (fun (id, _) -> id) param_bound_ids_bt)
+                                                          then CArr(CVar (id ^ "_2"), emk () (CSub(rename_cexpr fst_exp, (emk () (CL(CVar("lower_bound_" ^ id)))))) :: (List.map rename_cexpr rest_exp_lst))
+                                                          else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
+              | CVar id -> CVar(if List.mem id (List.map (fun (id, _) -> id) param_bound_ids_bt) then (id ^ "_2") else id)
+              | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
+              | CDeref clv -> CDeref(rename_clval clv)
+              | CRef clv -> CRef(rename_clval clv)
+              )
               and rename_cexpr (exp: 'a cexpr): 'a cexpr =
                 emk ()
              (match edesc exp with 
@@ -756,10 +778,9 @@ in let global_convert_to_shared ((id, lb, ub), t) =
              let arrs =
               (* let _ = print_string (String.concat ", " (List.map (fun ((id, _, _) , _) -> id) (get_param_bounds params))) in *)
               (t, id, params, (a, 
-                               (List.map param_to_cdecl (non_array_params)) 
-                              @ List.flatten (List.map global_convert_to_shared (get_param_bounds params))
+                               List.flatten (List.map global_convert_to_shared (get_param_bounds params))
                               @ bl
-                              @ (List.map shared_back_to_global (param_bound_ids_bt @ non_array_params))), b)
+                              @ (List.map shared_back_to_global (param_bound_ids_bt))), b)
               in arrs
 
 
