@@ -359,6 +359,36 @@ let rec imp_of_cexpr da vctx p m e =
                I.IAssume (LAnd (LCmp (EVar rvar, Ge, ENum 0),
                                 LCmp (EVar rvar, Lt, EVar x2)))*)])),
       mka (EVar rvar))
+  | CMin es ->
+     let rvar = new_var () in
+     (charge (m (KCall (List.length es)))
+        (List.concat
+           (List.map
+              (function
+               | (a, CL (CVar x)) ->
+                  charge_var m x
+                    [I.IAssume (LCmp (mka (EVar rvar), Le, mk a (EVar x)))]
+               | _ -> raise NotNormalized)
+              es
+           )
+        ),
+      mka (EVar rvar)
+     )
+  | CMax es ->
+     let rvar = new_var () in
+     (charge (m (KCall (List.length es)))
+        (List.concat
+           (List.map
+              (function
+               | (a, CL (CVar x)) ->
+                  charge_var m x
+                    [I.IAssume (LCmp (mka (EVar rvar), Ge, mk a (EVar x)))]
+               | _ -> raise NotNormalized)
+              es
+           )
+        ),
+      mka (EVar rvar)
+     )
   | _ -> raise NotNormalized
 
 let rec imp_of_clogic da vctx p m l =

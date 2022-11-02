@@ -38,6 +38,8 @@ and 'a cexpr_ =
   | CMul of 'a cexpr * 'a cexpr
   | CDiv of 'a cexpr * 'a cexpr
   | CMod of 'a cexpr * 'a cexpr
+  | CMin of 'a cexpr list
+  | CMax of 'a cexpr list
   | CCall of string * 'a cexpr list
 and 'a cexpr = 'a * 'a cexpr_
 
@@ -63,6 +65,8 @@ and reannot (f: 'a -> 'b) (e: 'a cexpr) : 'b cexpr =
     | CMul (e1, e2) -> CMul (reannot f e1, reannot f e2)
     | CDiv (e1, e2) -> CDiv (reannot f e1, reannot f e2)
     | CMod (e1, e2) -> CMod (reannot f e1, reannot f e2)
+    | CMin es -> CMin (List.map (reannot f) es)
+    | CMax es -> CMax (List.map (reannot f) es)
     | CCall (s, es) -> CCall (s, List.map (reannot f) es)
   in
   (f (eann e), reannot_desc (edesc e))
@@ -184,6 +188,8 @@ let rec erase_ce e =
      | CMul (e1, e2) -> CMul (erase_ce e1, erase_ce e2)
      | CDiv (e1, e2) -> CDiv (erase_ce e1, erase_ce e2)
      | CMod (e1, e2) -> CMod (erase_ce e1, erase_ce e2)
+     | CMin es -> CMin (List.map erase_ce es)
+     | CMax es -> CMax (List.map erase_ce es)
      | CCall (f, args) -> CCall (f, List.map erase_ce args)
     )
 and erase_cv cv =
