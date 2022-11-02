@@ -233,7 +233,11 @@ and rev_cuda_of_expression da (f, l) exp =
                   ([], [])
                   args
      in
-     (ss, expr (CCall (func, List.rev args)))
+     (match func with
+      | "min" -> (ss, expr (CMin (List.rev args)))
+      | "max" -> (ss, expr (CMax (List.rev args)))
+      | _ -> (ss, expr (CCall (func, List.rev args)))
+     )
   | C.CALL _ -> raise (InvalidCUDA (f, l, "unsupported function call"))
   | C.COMMA es ->
      List.fold_left
@@ -448,6 +452,8 @@ and print_cexpr fmt e =
   | CMul (e1, e2) -> paren_helper "*" e1 e2
   | CDiv (e1, e2) -> paren_helper "/" e1 e2
   | CMod (e1, e2) -> paren_helper "%%" e1 e2
+  | CMin args -> fprintf fmt "@[min(%a)@]" print_args args
+  | CMax args -> fprintf fmt "@[max(%a)@]" print_args args
   | CCall (s, args) ->
      fprintf fmt "@[%s(%a)@]" s print_args args
 let rec print_clogic fmt l =
@@ -843,6 +849,26 @@ and normalize_cexpr da e =
      ((CAssign (CVar x, (eann e, CMod (cl an1 (CVar x1), cl an2 (CVar x2))),
                 true))::(is2 @ is1),
       x)
+  | CMin es ->
+     let (is, xs) =
+       List.fold_left (fun (is, xs) e ->
+           let (is', an, x) = normalize_cexpr e in
+           (is' @ is, (an, CL (CVar x))::xs))
+         ([], [])
+         es
+     in
+     let x = new_var () in
+     ((CAssign (CVar x, (eann e, CMin xs), true))::is, x)
+  | CMax es ->
+     let (is, xs) =
+       List.fold_left (fun (is, xs) e ->
+           let (is', an, x) = normalize_cexpr e in
+           (is' @ is, (an, CL (CVar x))::xs))
+         ([], [])
+         es
+     in
+     let x = new_var () in
+     ((CAssign (CVar x, (eann e, CMax xs), true))::is, x)
   | CCall (s, es) ->
      let (is, xs) =
        List.fold_left (fun (is, xs) e ->
