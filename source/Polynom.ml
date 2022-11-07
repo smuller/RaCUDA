@@ -10,6 +10,7 @@ module type Factor = sig
   val degree: t -> int
   val var_exists: (Types.id -> bool) -> t -> bool
   val print: Format.formatter -> t -> unit
+  val toCUDA: t -> unit CUDA_Types.cexpr option
 end
 
 (* M = 1 | x | M1.M2 | max(0,P) *)
@@ -28,6 +29,7 @@ module type Monom = sig
   val mul_factor: factor -> int -> t -> t
   val mul: t -> t -> t
   val print: ascii: bool -> Format.formatter -> t -> unit
+  val toCUDA: t -> unit CUDA_Types.cexpr option
 end
 
 (* P = k.M | P1 + P2 *)
@@ -54,6 +56,7 @@ module type Poly = sig
   val pow: int -> t -> t
   val print: Format.formatter -> t -> unit
   val print_ascii: Format.formatter -> t -> unit
+  val toCUDA: t -> unit CUDA_Types.cexpr option
 end
 
 module MkFactor(Pol: Poly)
@@ -84,6 +87,12 @@ module MkFactor(Pol: Poly)
     | Var v -> Format.fprintf fmt "%s" v
     | Max p -> Format.fprintf fmt "max(0, %a)" Pol.print p
 
+  let toCUDA = function
+    | Var v -> CUDA_Types.(Some (emk () (CL (CVar v))))
+    | Max _ -> None
+
+
+             
 end
 
 module MkMonom(Fac: Factor)
@@ -105,6 +114,35 @@ module MkMonom(Fac: Factor)
   let fold = M.fold
   let one = M.empty
   let pick = M.choose
+
+  let toCUDA m =
+    let open CUDA_Types in
+    try
+      M.fold
+        (fun f ex c ->
+          match c with
+          | None -> None
+          | Some c ->
+             if ex = 0 then Some c
+             else if ex = 1 then
+               (match Fac.toCUDA f with
+                | Some c' -> Some (emk () (CMul (c', c)))
+                | None -> None)
+             else
+               (* Don't support exponents yet *)
+               None
+        )
+        m
+        (let (f, ex) = M.choose m in
+         if ex = 0 then Some (emk () (CConst (CInt 1)))
+         else if ex = 1 then
+           (match Fac.toCUDA f with
+            | Some c' -> Some c'
+            | None -> None)
+         else
+           (* Don't support exponents yet *)
+           None)
+    with Not_found -> Some (emk () (CConst (CInt 1)))
 
   let degree m =
     fold (fun f e d -> d + e * Fac.degree f) m 0
@@ -309,6 +347,47 @@ module MkPoly(Mon: Monom)
 
   let zero () = zero
 
+  let toCUDA p =
+    let open CUDA_Types in
+    try
+      M.fold
+        (fun m x c ->
+          match c with
+          | None -> None
+          | Some c ->
+             let xi = int_of_float x in
+             if abs_float ((float_of_int xi) -. x) < 0.0001 then
+               (match Mon.toCUDA m with
+                  Some cm ->
+                   if xi = 1 then
+                     Some (emk () (CAdd (cm, c)))
+                   else
+                     Some (emk ()
+                             (CAdd (emk () (CMul (cm,
+                                                  (emk () (CConst (CInt xi))))),
+                                    c)
+                             )
+                       )
+                | None -> None
+               )
+             else
+               None
+        )
+        p
+        (let (m, x) = M.choose p in
+         let xi = int_of_float x in
+         if abs_float ((float_of_int xi) -. x) < 0.0001 then
+           (match Mon.toCUDA m with
+              Some cm ->
+               if xi = 1 then
+                 Some cm
+               else
+                 Some (emk () (CMul (cm, (emk () (CConst (CInt xi))))))
+            | None -> None
+           )
+         else None
+        )
+    with Not_found -> Some (emk () (CConst (CInt 0)))
 end
 
 module

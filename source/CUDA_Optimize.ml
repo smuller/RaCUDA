@@ -761,18 +761,18 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       ]
             
                  in let get_param_bounds params = 
-    
+    (*
                    let print_debug ((id, lbs, ubs), _) =
                     Format.fprintf Format.std_formatter "ID of %s in with LBS %a AND UBS %a\n"
                     id
                     CUDA.print_cexpr_list (List.map expr_eval lbs)
                     CUDA.print_cexpr_list (List.map expr_eval ubs) in
-                    
+     *)
                   
                    let param_ids = List.map (fun (id, _) -> id) params in 
                    let bounds_info = List.filter (fun (id, _, _) -> List.mem id param_ids ) (id_lbs_and_ubs (arrayReads @ arrayWrites)) in
                    let ret = List.map (fun (id, lb, ub) -> (let (_, bt) = List.find (fun (x, _) -> x = id) params in ((id, lb, ub), bt))) bounds_info 
-                   in let useless = List.map print_debug ret in
+                   in(* let useless = List.map print_debug ret in *)
                    ret
                 in
                 let param_bounds = get_param_bounds params in
