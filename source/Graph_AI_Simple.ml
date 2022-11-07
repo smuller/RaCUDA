@@ -376,60 +376,6 @@ let bd_to_poly neg (k, l) =
   let module P = Polynom.Poly in
   let k = if neg then ~-k else k in
   P.scale (1. /. (float_of_int k)) (Presburger.L.toPoly l)
-
-let factor_to_CUDA f =
-  let open CUDA_Types in
-  match f with
-  | Factor.Var v -> Some (emk () (CL (CVar v)))
-  | Factor.Max _ -> None
-
-let monom_to_CUDA m =
-  let open CUDA_Types in
-  Polynom.Monom.fold
-    (fun f ex (c: 'a option) ->
-      match c with
-      | None -> None
-      | Some c ->
-         if ex = 0 then Some c
-         else if ex = 1 then
-           (match factor_to_CUDA f with
-            | Some c' -> Some (emk () (CMul (c', c)))
-            | None -> None)
-         else
-    (* Don't support exponents yet *)
-           None
-    )
-    m
-    (Some (emk () (CConst (CInt 1))) : 'a option)
-let poly_to_CUDA p =
-  let open CUDA_Types in
-  Polynom.Poly.fold
-    (fun m x c ->
-      match c with
-      | None -> None
-      | Some c ->
-         let xi = int_of_float x in
-         if abs_float ((float_of_int xi) -. x) < 0.0001 then
-           (match monom_to_CUDA m with
-              Some cm ->
-               if xi = 1 then
-                 Some (emk () (CAdd (cm, c)))
-               else
-              Some (emk ()
-                      (CAdd (emk () (CMul (cm,
-                                           (emk () (CConst (CInt xi))))),
-                             c)
-                      )
-                )
-            | None -> None
-           )
-         else
-           (* Don't support floats *)
-           None
-    )
-    p
-    (Some (emk () (CConst (CInt 0))))
-         
   
 
 let is_nonneg (abs, _, _, _) pol =
@@ -605,14 +551,14 @@ let bounds abs pe =
       (Some (Poly.zero (), Poly.zero ()))
     with
     | Some (plb, pub) ->
-       (match (poly_to_CUDA plb, poly_to_CUDA (Poly.sub pub plb))
+       (match (Poly.toCUDA plb, Poly.toCUDA pub)
         with
-        | (Some clb, Some cdiff) ->
-           (Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\ndiff: %a\n"
+        | (Some clb, Some cub) ->
+           (Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
               Poly.print pe
               CUDA.print_cexpr clb
-              CUDA.print_cexpr cdiff;
-            Some (clb, cdiff))
+              CUDA.print_cexpr cub;
+            Some (clb, cub))
         | _ -> Format.fprintf Format.std_formatter "None\n"; None)
     | None -> (Format.fprintf Format.std_formatter "None\n"; None)
 
