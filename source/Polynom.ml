@@ -118,6 +118,8 @@ module MkMonom(Fac: Factor)
   let toCUDA m =
     let open CUDA_Types in
     try
+      let (f, ex) = M.choose m in
+      let m' = M.remove f m in
       M.fold
         (fun f ex c ->
           match c with
@@ -132,9 +134,8 @@ module MkMonom(Fac: Factor)
                (* Don't support exponents yet *)
                None
         )
-        m
-        (let (f, ex) = M.choose m in
-         if ex = 0 then Some (emk () (CConst (CInt 1)))
+        m'
+        (if ex = 0 then Some (emk () (CConst (CInt 1)))
          else if ex = 1 then
            (match Fac.toCUDA f with
             | Some c' -> Some c'
@@ -350,6 +351,8 @@ module MkPoly(Mon: Monom)
   let toCUDA p =
     let open CUDA_Types in
     try
+      let (m, x) = M.choose p in
+      let p' = M.remove m p in
       M.fold
         (fun m x c ->
           match c with
@@ -373,9 +376,8 @@ module MkPoly(Mon: Monom)
              else
                None
         )
-        p
-        (let (m, x) = M.choose p in
-         let xi = int_of_float x in
+        p'
+        (let xi = int_of_float x in
          if abs_float ((float_of_int xi) -. x) < 0.0001 then
            (match Mon.toCUDA m with
               Some cm ->
