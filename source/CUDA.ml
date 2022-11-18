@@ -414,11 +414,14 @@ let print_const fmt c =
 let rec print_clval fmt e =
   match e with
   | CVar "__bidx" -> ps fmt "blockIdx.x"
-  | CVar "__bidy" -> ps fmt "blockIdy.x"
-  | CVar "__bidz" -> ps fmt "blockIdz.x"
+  | CVar "__bidy" -> ps fmt "blockIdy.y"
+  | CVar "__bidz" -> ps fmt "blockIdz.z"
+  | CVar "__bdimx" -> ps fmt "blockDim.x"
+  | CVar "__bdimy" -> ps fmt "blockDim.y"
+  | CVar "__bdimz" -> ps fmt "blockDim.z"
   | CVar "__tidx" -> ps fmt "threadIdx.x"
-  | CVar "__tidy" -> ps fmt "threadIdy.x"
-  | CVar "__tidz" -> ps fmt "threadIdz.x"
+  | CVar "__tidy" -> ps fmt "threadIdy.y"
+  | CVar "__tidz" -> ps fmt "threadIdz.z"
   | CVar id -> ps fmt id
   | CArr (a, es) ->
      (fprintf fmt "%a@," print_clval a;

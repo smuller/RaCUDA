@@ -203,7 +203,11 @@ let rec imp_of_param ps p =
       | (None, X) -> EVar (CUDA_Config.bidx_var)
       | (None, Y) -> EVar (CUDA_Config.bidy_var)
       | (None, Z) -> EVar (CUDA_Config.bidz_var))
-  | BlockDim d -> ENum (get_dim ps.blockdim d)
+  | BlockDim d -> (*ENum (get_dim ps.blockdim d) *)
+     (match d with
+      | X -> EVar (CUDA_Config.bdimx_var)
+      | Y-> EVar (CUDA_Config.bdimy_var)
+      | Z -> EVar (CUDA_Config.bdimz_var))
   (* XXX TODO *)
   | ThreadIdx X -> EVar (CUDA_Config.tidx_var)
   | ThreadIdx Y -> EVar (CUDA_Config.tidy_var)

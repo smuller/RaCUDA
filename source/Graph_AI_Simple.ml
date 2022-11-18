@@ -478,7 +478,10 @@ let bounds abs pe =
     | Factor.Var v -> v
     | _ -> failwith "factor not a var"
     
-  let bounds_gen abs pe =
+  let bounds_gen (abs, cu) pe =
+    let rec bounds_gen_poly depth pe =
+      if depth <= 0 then None
+      else
     let open CUDA_Types in
     let filter_bds f (_, b) =
       let vars = L.vars Presburger.S.empty b in
@@ -492,64 +495,124 @@ let bounds abs pe =
     let _ = Format.fprintf Format.std_formatter "bounds_gen %a\n"
               Poly.print pe
     in
-    match
-    Poly.fold (fun m k ->
-        function
-          None -> None
-        | Some (lb, ub) ->
-           (match
-           Monom.fold (fun f e ->
-               function
-                 None -> None
-               | Some (lb, ub) ->
-                  if Factor.degree f = 1 && e = 1 && is_param (factor_var f)
-                  then
-                    let v = factor_var f in
-                    let _ = Printf.printf "Using %s\n" v in
-                    Some (Poly.mul lb (Poly.of_monom (Monom.of_var v) 1.0),
-                          Poly.mul ub (Poly.of_monom (Monom.of_var v) 1.0))
-                  else
-                    (Format.fprintf Format.std_formatter "Finding bounds for %a\n"
-                       Factor.print f;
-                     let (lbs, ubs) =
-                       bounds abs
-                         (Poly.of_monom (Monom.of_factor f e) 1.0)
-                     in
-                     Format.fprintf Format.std_formatter "%d lbs, %d ubs\n"
-                       (List.length lbs)
-                       (List.length ubs);
-                     
-                     match (List.filter (filter_bds f) lbs,
-                            List.filter (filter_bds f) ubs)
-                   with
-                   | (lb'::olbs, ub'::_) ->
-                      if is_nonneg_lbs (lb'::olbs)
-                         || e mod 2 = 0 then
-                        let (plb, pub) = (bd_to_poly false lb',
-                                          bd_to_poly true ub')
-                        in
-                        let _ = Format.fprintf Format.std_formatter
-                                  "lb: %a\nub: %a\n"
-                                  Poly.print plb
-                                  Poly.print pub
-                        in
-                        Some (Poly.mul lb plb, Poly.mul ub pub)
-                      else
-                        (Format.fprintf Format.std_formatter "Negative lb\n"; None)
-                   | _ -> None)
+    let add_opt b1 b2 =
+      match (b1, b2) with
+      | (Some b1, Some b2) -> Some (Poly.add b1 b2)
+      | _ -> None
+    in
+    let add2_opt (lb1, ub1) (lb2, ub2) =
+      (add_opt lb1 lb2, add_opt ub1 ub2)
+    in
+    let mul_opt b1 b2 =
+      match (b1, b2) with
+      | (Some b1, Some b2) -> Some (Poly.mul b1 b2)
+      | _ -> None
+    in
+    let sc_r_f_opt f fb1 arg b2 =
+      match b2 with
+        None -> None
+      | Some (lb2, ub2) ->
+         (match fb1 arg with
+          | None -> None
+          | Some (lb1, ub1) -> Some (f lb1 lb2, f ub1 ub2)
+         )
+    in
+    let sc_r_add_opt = sc_r_f_opt Poly.add in
+    let sc_r_mul_opt = sc_r_f_opt Poly.mul in
+    let bounds_from_cuda id =
+      (* Try using the CUDA abstraction domain to get bounds, e.g.
+       * if x = 2tidx + k, then lb(x) = ub(x) = k *)
+      let get_dim_bds (dim, var) =
+        try
+          let (cm, _, _) = M.find id cu in
+          match DM.find dim cm with
+          | Bot -> None
+          | V p ->
+             (match bounds_gen_poly (depth - 1) p with
+              | None -> None
+              | Some (lb, ub) ->
+                 let poly_var = match var with
+                   | Some var -> Poly.of_monom (Monom.of_var var) 1.0
+                   | None -> Poly.const 1.0
+                 in
+                 Some (Poly.mul lb poly_var, Poly.mul ub poly_var)
              )
-             m
-             (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
-           with
-           | None -> None
-           | Some (lb', ub') ->
-              Some (Poly.add lb (Poly.scale k lb'),
-                    Poly.add ub (Poly.scale k ub'))
-           )
+        with Not_found -> None
+      in
+      let open CUDA_Config in
+      sc_r_add_opt get_dim_bds (Some X, Some tidx_var)
+        (sc_r_add_opt get_dim_bds (Some Y, Some tidy_var)
+           (sc_r_add_opt get_dim_bds (Some Z, Some tidz_var)
+              (get_dim_bds (None, None))))
+    in
+    let bounds_from_presb f e =
+      (* Bring out the big hammer and try to get bounds using the
+       * Presburger constraints
+       * (actually, this hammer is of incomparable size with the CUDA one,
+       * since each will find some bounds the other won't)
+       *)
+      let (lbs, ubs) =
+        bounds abs
+          (Poly.of_monom (Monom.of_factor f e) 1.0)
+      in
+      Format.fprintf Format.std_formatter "%d lbs, %d ubs\n"
+        (List.length lbs)
+        (List.length ubs);
+      
+      match (List.filter (filter_bds f) lbs,
+             List.filter (filter_bds f) ubs)
+      with
+      | (lb'::olbs, ub'::_) ->
+         if is_nonneg_lbs (lb'::olbs)
+            || e mod 2 = 0 then
+           let (plb, pub) = (bd_to_poly false lb',
+                             bd_to_poly true ub')
+           in
+           let _ = Format.fprintf Format.std_formatter
+                     "lb: %a\nub: %a\n"
+                     Poly.print plb
+                     Poly.print pub
+           in
+           Some (plb, pub)
+         else
+           (Format.fprintf Format.std_formatter "Negative lb\n"; None)
+      | _ -> None
+    in
+    Poly.fold (fun m k ->
+        sc_r_f_opt (fun a b -> Poly.add b (Poly.scale k a))
+          (fun _ ->
+            Monom.fold (fun f e ->
+                sc_r_mul_opt
+                  (fun _ ->
+                    if Factor.degree f = 1 && e = 1
+                    then
+                      let v = factor_var f in
+                      if is_param (factor_var f) then
+                        (* This is a CUDA builtin or function parameter, we
+                         * can use it as its own bound *)
+                        let v = factor_var f in
+                        Some (Poly.of_monom (Monom.of_var v) 1.0,
+                              Poly.of_monom (Monom.of_var v) 1.0)
+                      else
+                        (* First try using the CUDA abstraction domain *)
+                        match bounds_from_cuda v with
+                        | Some bds -> Some bds
+                        | None -> bounds_from_presb f e
+                    else
+                      (* If that fails or isn't applicable, use Presburger *)
+                      bounds_from_presb f e
+                  )
+                  ()
+              )
+              m
+              (Some (Poly.of_monom Monom.one 1.0, Poly.of_monom Monom.one 1.0))
+          )
+          ()
       )
       pe
       (Some (Poly.zero (), Poly.zero ()))
-    with
+    in
+    match bounds_gen_poly 2 pe with
     | Some (plb, pub) ->
        (match (Poly.toCUDA plb, Poly.toCUDA pub)
         with
