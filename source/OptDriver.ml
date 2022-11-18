@@ -304,13 +304,13 @@ let analyze_cu_prog tick_var p m cuda =
          )
          imp_file)
   in
-  let f ((fname :Types.id), (vertex : int)) (_, abs, _, _) =
+  let f ((fname :Types.id), (vertex : int)) (_, abs, cu, _) =
     let ht = List.assoc fname hts in
     let el = Hashtbl.find_opt ht vertex in
     
     let bds_for_e e =
       let pe = Polynom.Poly.of_expr e in
-      match Graph_AI_Simple.Solver.bounds_gen abs pe with
+      match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
       | Some (lb, ub) ->
          (*Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
            IMP_Print.print_expr e

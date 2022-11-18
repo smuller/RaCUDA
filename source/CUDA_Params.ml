@@ -29,7 +29,7 @@ let params_of_line (p, m, h, i) s =
   | ["gridDim"; x; y; z] ->
      ({p with griddim = dim3_of_xyz (x, y, z)}, m, h, i + 1)
   | ["blockDim"; x; y; z] ->
-     ({p with blockdim = dim3_of_xyz (x, y, z)}, m, h, i + 1)
+     ({p with blockdim = (dim3_of_xyz (x, y, z))}, m, h, i + 1)
   | ["blockIdx"; x; y; z] ->
      ({p with blockidx = Some (dim3_of_xyz (x, y, z))}, m, h, i + 1)
   | ["initThread"; x; y; z] ->
