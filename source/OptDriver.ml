@@ -312,14 +312,22 @@ let analyze_cu_prog tick_var p m cuda =
       let pe = Polynom.Poly.of_expr e in
       match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
       | Some (lb, ub) ->
+         let open Format in
+         fprintf std_formatter "Attaching @<2>[%a@] to %a"
+           (Print.list ~sep:" &&@ "
+               (fun fmt (id, cd) ->
+                 (fprintf fmt "%s = %a" id AI.print_cuda cd)))
+           (AI.M.bindings cu)
+           IMP_Print.print_expr e;
+         print_newline ();
          (*Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
            IMP_Print.print_expr e
            CUDA.print_cexpr lb
            CUDA.print_cexpr ub; *)
          (ann e) := Some (lb, ub)
-      | None -> () (*Format.fprintf Format.std_formatter
+      | None -> Format.fprintf Format.std_formatter
                "no bounds for %a :(\n"
-               IMP_Print.print_expr e *)
+               IMP_Print.print_expr e
     in
     let rec bds_for_e_rec e =
       bds_for_e e;
@@ -330,7 +338,7 @@ let analyze_cu_prog tick_var p m cuda =
       | _ -> ()
     in
     match el with
-    | None -> ()
+    | None -> Format.fprintf Format.std_formatter "No exp for %d\n" vertex
     | Some el ->
        List.iter bds_for_e_rec el
   in
