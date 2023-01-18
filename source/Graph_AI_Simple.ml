@@ -479,15 +479,6 @@ let bounds abs pe =
     | _ -> failwith "factor not a var"
     
   let bounds_gen (abs, cu) pe =
-    let _ =
-      let open Format in
-      ((Print.list ~sep:" &&@ "
-          (fun fmt (id, cd) ->
-            (fprintf fmt "%s = %a" id print_cuda cd))
-          std_formatter
-          (M.bindings cu))
-      )
-    in
     let rec bounds_gen_poly depth pe =
       if depth <= 0 then None
       else
@@ -1698,13 +1689,8 @@ let analyze ?f:(f : Types.id * int -> absval -> unit = fun _ _ -> ()) ~dump pm (
   let _ = Printf.printf "got graph\n%!" in
   let info = PSHGraph.info graph in
   (* let _ = Printf.printf "got info\n%!" in *)
-  let (fpman, res) = Solver.compute (* f *) (fun _ _ -> ()) pm graph fstart in
+  let (fpman, res) = Solver.compute f pm graph fstart in
   let _ = Printf.printf "solved\n%!" in
-  let _ = PSHGraph.iter_vertex res
-            (fun v abs ~pred ~succ ->
-              f v abs
-            )
-  in
   if dump then begin
     let fn = "simple_ai.dot" in 
     let oc = open_out fn in
