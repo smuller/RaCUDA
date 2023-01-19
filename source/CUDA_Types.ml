@@ -109,7 +109,7 @@ type 'a cprog = (id * Cabs.base_type * mem) list * 'a cfunc list
 
 (* type annot = () option ref *)
               
-let rec reannot_instr (f: 'a -> unit) (i: 'a cinstr) : unit cinstr =
+let rec reannot_instr (f: 'a -> 'b) (i: 'a cinstr) : 'b cinstr =
   match i with
   | CBreak -> CBreak
   | CDecl (x, m, t, ds) -> CDecl (x, m, t, ds)
@@ -132,7 +132,7 @@ let reannot_func f (ty, n, ps, b, k) =
 
 
   
-let reannot_prog (f: 'a -> unit) ((gs, fs) : 'a cprog) : unit cprog =
+let reannot_prog (f: 'a -> 'b) ((gs, fs) : 'a cprog) : 'b cprog =
   (gs, List.map (reannot_func f) fs)
 
 type arr_or_const = Arr of const array | Const of const
