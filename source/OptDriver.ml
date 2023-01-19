@@ -327,22 +327,29 @@ let analyze_cu_prog tick_var p m cuda =
          print_newline ();
       match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
       | Some (lb, ub) ->
-         (*Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
+         Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
            IMP_Print.print_expr e
            CUDA.print_cexpr lb
-           CUDA.print_cexpr ub; *)
+           CUDA.print_cexpr ub;
          (ann e) := Some (lb, ub)
       | None -> Format.fprintf Format.std_formatter
                "no bounds for %a :(\n"
                IMP_Print.print_expr e
     in
     let rec bds_for_e_rec e =
-      bds_for_e e;
-      match desc e with
-      | EAdd (e1, e2)
-        | ESub (e1, e2)
-        | EMul (e1, e2) -> bds_for_e_rec e1; bds_for_e_rec e2
-      | _ -> ()
+      match !(ann e) with
+        Some _ -> ()
+      | None ->
+         (bds_for_e e;
+          match !(ann e) with
+          | None | Some _ ->
+             (match desc e with
+              (* | EAdd (e1, e2) *)
+              | ESub (e1, e2)
+                | EMul (e1, e2) -> bds_for_e_rec e1; bds_for_e_rec e2
+              | _ -> ())
+          | Some _ -> ()
+         )
     in
     match el with
     | None -> Format.fprintf Format.std_formatter "No exp for %d\n" vertex
