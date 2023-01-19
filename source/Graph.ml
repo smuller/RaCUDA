@@ -92,13 +92,13 @@ let print_graph_prg ?need_analysis:(neededness = None) oc globals func_l =
    actions on them.
  *)
 
-type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
+(* type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref *)
 type hannot = annot Types.expr list
 
             
 let from_imp_with_annots transformed tick_var
-      (impf : (Focus.focus, 'annot IMP.block) Types.func_)
-    : 'c * ((int, 'annot Types.expr list) Hashtbl.t) =
+      (impf : (Focus.focus, 'a IMP.block) Types.func_)
+    : 'c * ((int, annot Types.expr list) Hashtbl.t) =
 
   let h_position = Hashtbl.create 51 in
   let h_edges = Hashtbl.create 51 in
@@ -109,6 +109,13 @@ let from_imp_with_annots transformed tick_var
     let node = !next_node in
     Hashtbl.add h_position node pos;
     Hashtbl.add h_annots node a;
+    (match a with
+     | [] -> ()
+     | e::_ ->
+        Format.fprintf Format.std_formatter "%a should get %d\n"
+          IMP_Print.print_expr e
+          node
+    );
     incr next_node;
     node
   in
@@ -141,7 +148,8 @@ let from_imp_with_annots transformed tick_var
     if false then Printf.printf "to_prob_branching last_key = %d\n" last_key;
     let keys' = List.rev (List.tl (List.rev keys)) in
     let beg = new_node pos in
-
+    let an = ref None in
+    
     let create_prob_branching n (k, p) = 
       let ln' = new_node pos in
       let rn' = new_node pos in
@@ -150,11 +158,11 @@ let from_imp_with_annots transformed tick_var
       (* edge to fin *)
       let e' = match op with
                | Dadd ->
-                 mk () (EAdd (e, mk () (ENum k)))
+                 mk (an) (EAdd (e, mk (an) (ENum k)))
                | Dsub ->
-                 mk () (ESub (e, mk () (ENum k)))
+                 mk (an) (ESub (e, mk (an) (ENum k)))
                | Dmul ->
-                 mk () (EMul (e, mk () (ENum k)))
+                 mk (an) (EMul (e, mk (an) (ENum k)))
       in
       new_edge ln' (AAssign (id, ref e', ref false)) fin;
       new_edge n (AProb (1. -. p)) rn';
@@ -166,11 +174,11 @@ let from_imp_with_annots transformed tick_var
     (* the last edge *)
     let e' = match op with
              | Dadd ->
-               mk () (EAdd (e, mk () (ENum last_key)))
+               mk (an) (EAdd (e, mk (an) (ENum last_key)))
              | Dsub ->
-               mk () (ESub (e, mk () (ENum last_key)))
+               mk (an) (ESub (e, mk (an) (ENum last_key)))
              | Dmul ->
-               mk () (EMul (e, mk () (ENum last_key)))
+               mk (an) (EMul (e, mk (an) (ENum last_key)))
     in
     new_edge last_level_node (AAssign (id, ref e', ref false)) fin;
     beg
@@ -356,7 +364,7 @@ let from_imp_with_annots transformed tick_var
   in
 
   (* graph for one instruction *)
-  let rec goi fin loo pos : 'a IMP_Types.instr -> node =
+  let rec goi fin loo pos : annot IMP_Types.instr -> node =
     (*
     let create_assign_edge = create_assign_edge a in
     let new_node = new_node a in
@@ -393,10 +401,11 @@ let from_imp_with_annots transformed tick_var
               create_assign_edge [e] id e fin pos
         end
       else *)
-        create_assign_edge [e] id (erase_e e) fin pos
+       create_assign_edge [e] id ((*erase_e*) e) fin pos
     | IMP.ITick n ->
+       let an = ref None in
        create_pot_assign_edge [] tick_var
-         (mk () (EAdd (mk () (EVar tick_var), mk () (ENum n)))) fin pos
+         (mk (an) (EAdd (mk (an) (EVar tick_var), mk (an) (ENum n)))) fin pos
     | IMP.ITickMemReads (id, size, host, read) ->
        let beg = new_node [] pos in
        let ph = ref None in
@@ -418,9 +427,10 @@ let from_imp_with_annots transformed tick_var
       let bege2 = gob fini loo be in
       let bege2 = create_switch_edge bi bege2 be.IMP.b_start_p in
       let begi2 = gob bege2 loo bi in
+      let an = ref None in
       let tick = create_pot_assign_edge a tick_var
-                   (mk () (EAdd (mk () (EVar tick_var),
-                          mk () (EVar (CUDA_Config.div_cost)))))
+                   (mk (an) (EAdd (mk (an) (EVar tick_var),
+                          mk (an) (EVar (CUDA_Config.div_cost)))))
                    begi2
                    pos
       in
@@ -440,9 +450,10 @@ let from_imp_with_annots transformed tick_var
        let fin2 = create_switch_edge bi fin2a bi.IMP.b_end_p in
       let begi = gob fini loo bi in
       let begi2 = gob fin2 loo bi in
+      let an = ref None in
       let tick = create_pot_assign_edge [] tick_var
-                   (mk () (EAdd (mk () (EVar tick_var),
-                          mk () (EVar (CUDA_Config.div_cost)))))
+                   (mk (an) (EAdd (mk (an) (EVar tick_var),
+                          mk (an) (EVar (CUDA_Config.div_cost)))))
                    begi2
                    pos
       in
@@ -483,9 +494,10 @@ let from_imp_with_annots transformed tick_var
       let beg = new_node (eol log) pos in
       let jmp = new_node [] b.IMP.b_end_p in
       let begb = gob beg fin b in
+      let an = ref None in
       let tick = create_pot_assign_edge [] tick_var
-                   (mk () (EAdd (mk () (EVar tick_var),
-                          mk () (EVar (CUDA_Config.div_cost)))))
+                   (mk (an) (EAdd (mk (an) (EVar tick_var),
+                          mk (an) (EVar (CUDA_Config.div_cost)))))
                    begb
                    pos
       in
@@ -583,11 +595,12 @@ let add_loop_counter cnt gfunc =
   let gfunc = rpo_order gfunc in
   let g = gfunc.fun_body in
   let nnodes = Array.length g.g_edges in
-  let incs = ref [[AAssign (cnt, ref (mk () (ENum 0)), ref false), g.g_start]]
+  let an = ref None in
+  let incs = ref [[AAssign (cnt, ref (mk (an) (ENum 0)), ref false), g.g_start]]
   in
   let nincs = ref 1 in
   let add_increment dst =
-    let e = ref (mk () (EAdd (mk () (ENum 1), mk () (EVar cnt)))) in
+    let e = ref (mk (an) (EAdd (mk (an) (ENum 1), mk (an) (EVar cnt)))) in
     incs := [AAssign (cnt, e, ref false), dst] :: !incs;
     incr nincs;
     !nincs - 1 + nnodes
@@ -620,7 +633,7 @@ let add_loop_counter cnt gfunc =
 
 module type AbsInt = sig
   type absval
-  val analyze: ?f:(Types.id * int -> absval -> unit) ->
+  val analyze: ?f:(?e:annot Types.expr ref -> Types.id * int -> absval -> unit) ->
                dump:bool ->
                (CUDA_Cost.array_params * CUDA_Cost.cmetric) option ->
                (id list * func list) -> id ->

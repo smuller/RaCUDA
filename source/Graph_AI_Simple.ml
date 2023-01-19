@@ -108,7 +108,7 @@ type transfer =
   | TNone
   | TWeaken
   | TGuard of L.sum DNF.t * ulogic
-  | TAssign of id * Poly.t option * uexpr ref * bool ref
+  | TAssign of id * Poly.t option * annot expr ref * bool ref
   | TAddMemReads of id * id * int option ref * int * bool * bool
   | TAddConflicts of id * id * int option ref * int * bool
   | TCall of func * func
@@ -352,7 +352,7 @@ let join (p1, p1e, m1, dv1) (p2, p2e, m2, dv2) =
 
 let join_list = List.fold_left join bottom
 let top = ([], [], M.empty, true)
-let print fmt (p, _, m, _) =
+let print fmt (_, p, m, _) =
   let open Format in
   (fprintf fmt "%a" Presburger.print p;
    (Print.list ~sep:" &&@ "
@@ -875,17 +875,20 @@ let bounds abs pe =
                  true)
     | _ -> cuda_unif
 
-  let apply_TAssign params (abs, abse, m, d) id (peo, e, is_pot) =
+  let apply_TAssign (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit)
+        params (abs, abse, m, d) id (peo, (e : annot Types.expr ref), is_pot) =
+    let _ = f ~e:e ("", 0) (abs, abse, m, d) in
+    let an = ann !e in
     let _ = match (params, desc !e) with
       | (Some (_, metric), EAdd ((_, EVar ov), (_, EVar v))) ->
          if String.compare v CUDA_Config.div_cost = 0
          then
-           e := mk () (EAdd (mk () (EVar ov),
-                             mk () (ENum (metric CUDA_Cost.KDivWarp))))
+           e := mk (an) (EAdd (mk (an) (EVar ov),
+                             mk (an) (ENum (metric CUDA_Cost.KDivWarp))))
          else
            (match M.find_opt v !known_temps with
             | Some n -> ((* Printf.printf "found\n"; *)
-                         e := mk () (EAdd (mk () (EVar ov), mk () (ENum n))))
+                         e := mk (an) (EAdd (mk (an) (EVar ov), mk (an) (ENum n))))
             | None -> () (*
                       let l = match M.find_opt v !waiting_temps with
                         | Some l -> l
@@ -1563,19 +1566,19 @@ let bounds abs pe =
           m)
       , dv)
 
-  let apply f
+  let apply (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit)
         pm graph hedge tabs =
     (* let _ = Printf.printf "apply %d\n%!" hedge in *)
     let gs = (PSHGraph.info graph).HyperGraph.globs in
     let pred = (PSHGraph.predvertex graph hedge).(0) in
-    let _ = f pred tabs.(0) in
+    (* let _ = f pred tabs.(0) in *)
     let transfer = PSHGraph.attrhedge graph hedge in
     let res =
       match transfer with
       | TGuard (disj, log) -> apply_TGuard tabs.(0) (disj, log)
       | TNotUnique lr -> apply_TNotUnique tabs.(0) lr
       | TUnique _ -> tabs.(0)
-      | TAssign (id, pe, e, pr) -> apply_TAssign pm tabs.(0) id (pe, e, pr)
+      | TAssign (id, pe, e, pr) -> apply_TAssign f pm tabs.(0) id (pe, e, pr)
       | TCall _ -> apply_TCall gs tabs.(0)
       | TAddMemReads (ido, idi, ph, size, host, read) ->
          let abs = apply_MemReads pm tabs.(0) ido idi ph size host read in
@@ -1622,7 +1625,7 @@ let bounds abs pe =
        m1 m2
     , dv1 || dv2)
 
-  let compute f pm graph fstart =
+  let compute (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit) pm graph fstart =
     let info = PSHGraph.info graph in
     let fs = Hashtbl.find info.HyperGraph.funch fstart in
     let _ = args := fs.fun_args in
@@ -1679,32 +1682,33 @@ let debug_print fmt info graph res =
          ids
   in
   let print_hedge_attr fmt hedge transfer =
-    Format.fprintf fmt "%a" print_transfer transfer
+    Format.fprintf fmt "%d: %a" hedge print_transfer transfer
   in
   PSHGraph.print_dot
     begin fun fmt (vf, vn) -> Format.fprintf fmt "%s_%d" vf vn end
     begin fun fmt hid -> Format.fprintf fmt "e_%d" hid end
     begin fun fmt v _ ->
-      print fmt (PSHGraph.attrvertex res v)
+      Format.fprintf fmt "%d: %a" (snd v) print (PSHGraph.attrvertex res v)
     end
     print_hedge_attr
     fmt graph
 
 (* Common API for abstract interpretation modules. *)
 
-let analyze ?f:(f : Types.id * int -> absval -> unit = fun _ _ -> ()) ~dump pm (gl, fl) fstart =
+let analyze ?f:(f : ?e:annot Types.expr ref -> Types.id * int -> absval -> unit = fun ?e _ _ -> ()) ~dump pm (gl, fl) fstart =
   let _ = Printf.printf "analyzing with allow_extend=%b\n%!" (!glob_allow_extend) in
   let graph = HyperGraph.from_program (gl, fl) in
   let _ = Printf.printf "got graph\n%!" in
   let info = PSHGraph.info graph in
   (* let _ = Printf.printf "got info\n%!" in *)
-  let (fpman, res) = Solver.compute (* f *) (fun _ _ -> ()) pm graph fstart in
+  let (fpman, res) = Solver.compute f pm graph fstart in
   let _ = Printf.printf "solved\n%!" in
-  let _ = PSHGraph.iter_vertex res
+  (* let _ = PSHGraph.iter_vertex graph
             (fun v abs ~pred ~succ ->
-              f v abs
+              f v (PSHGraph.attrvertex res v)
             )
   in
+   *)
   if dump then begin
     let fn = "simple_ai.dot" in 
     let oc = open_out fn in
