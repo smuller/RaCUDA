@@ -653,8 +653,8 @@ let run ai_results ai_is_bot ai_is_nonneg (gl, fl) start degree analysis_type qu
              (*Potential.dump Format.std_formatter a;
              Printf.printf "\n--------------\n"; *)
              debug_dumps := a :: !debug_dumps; a
-          | Graph.AAddMemReads (v, v', ph, _, _, _)
-            | Graph.AAddConflicts (v, v', ph, _, _) ->
+          | Graph.AAddMemReads (v, v', _, ph, _, _, _)
+            | Graph.AAddConflicts (v, v', _, ph, _, _) ->
              (match !ph with
               | None ->
                  ((* Printf.printf "WARNING: %s not filled in\n" v'; *)
