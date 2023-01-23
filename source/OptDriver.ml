@@ -336,8 +336,7 @@ let analyze_cu_prog tick_var p m cuda =
            CUDA.print_cexpr ub;
           *)
          (ann e) := Some (lb, ub)
-      | None -> ()
-                  (* Format.fprintf Format.std_formatter
+      | None -> () (*Format.fprintf Format.std_formatter
                "no bounds for %a :(\n"
                IMP_Print.print_expr e *)
     in
@@ -357,7 +356,7 @@ let analyze_cu_prog tick_var p m cuda =
          )
     in
     match el with
-    | None -> Format.fprintf Format.std_formatter "No exp for %d\n" vertex
+    | None -> ()
     | Some el ->
        List.iter bds_for_e_rec el
   in
