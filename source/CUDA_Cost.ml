@@ -289,10 +289,9 @@ let rec imp_of_cexpr da vctx p m e =
            (fun ind dim (vc, e) ->
              match edesc ind with
              | CL (CVar id) ->
+                let mk = mk (ann ind) in
                 ((if var_is_free id then vc else vc + (m KVar)),
-                 mk (da ()) (EAdd (mk (da ()) (EVar id),
-                                   mk (da ()) (EMul (e, mk (da ())
-                                                          (ENum dim))))))
+                 mk (EAdd (mk (EVar id), mk (EMul (e, mk (ENum dim))))))
              | _ -> raise NotNormalized)
            inds
            ((List.rev dims) @ [1])
@@ -303,9 +302,9 @@ let rec imp_of_cexpr da vctx p m e =
      let cvar = new_var () in
      let rvar = new_var () in
      let c = match mem with
-       | Shared -> [I.ITickConflicts (ind_var, size, true)]
-       | Host -> [I.ITickMemReads (ind_var, size, true, true)]
-       | Global -> [I.ITickMemReads (ind_var, size, false, true)]
+       | Shared -> [I.ITickConflicts (ind_var, ann ind, size, true)]
+       | Host -> [I.ITickMemReads (ind_var, ann ind, size, true, true)]
+       | Global -> [I.ITickMemReads (ind_var, ann ind, size, false, true)]
        | Local -> [I.ITick (m KVar)]
      in
      (* As an optimization, could just not emit this assignment
@@ -458,10 +457,9 @@ let rec imp_of_cinstr a vctx p m i =
                (fun ind dim (vc, e) ->
                  match edesc ind with
                  | CL (CVar id) ->
+                    let mk = mk (ann ind) in
                     ((if var_is_free id then vc else vc + (m KVar)),
-                     mk (a ()) (EAdd (mk (a ()) (EVar id),
-                                      mk (a ()) (EMul (e,
-                                                       mk (a ()) (ENum dim))))))
+                     mk (EAdd (mk (EVar id), mk (EMul (e, mk (ENum dim))))))
                  | _ -> raise NotNormalized)
                inds
                ((List.rev dims) @ [1])
@@ -471,9 +469,9 @@ let rec imp_of_cinstr a vctx p m i =
          let ind_var = new_var () in
          let cvar = new_var () in
          let c = match mem with
-           | Shared -> [I.ITickConflicts (ind_var, size, false)]
-           | Host -> [I.ITickMemReads (ind_var, size, true, false)]
-           | Global -> [I.ITickMemReads (ind_var, size, false, false)]
+           | Shared -> [I.ITickConflicts (ind_var, ann ind, size, false)]
+           | Host -> [I.ITickMemReads (ind_var, ann ind, size, true, false)]
+           | Global -> [I.ITickMemReads (ind_var, ann ind, size, false, false)]
            | Local -> [I.ITick (m KVar)]
          in
          (is @ ((costi vc)::(I.IAssign (ind_var, ind))::c), vctx)

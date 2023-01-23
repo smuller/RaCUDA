@@ -40,12 +40,12 @@ let action_to_str act =
   | AAssign (id, e, br) ->
      (Printf.sprintf "%s =[%s] " (if !br then "P" else "D") id) ^
        (Utils.expr_to_str (!e))
-  | AAddMemReads (ido, idi, _, size, host, read) ->
+  | AAddMemReads (ido, idi, _, _, size, host, read) ->
        Printf.sprintf "%s = %s + mem%ss(%s, %s, %d)"
          ido ido (if read then "read" else "write") idi
          (if host then "Host" else "Global")
          size
-  | AAddConflicts (ido, idi, _, size, read) ->
+  | AAddConflicts (ido, idi, _, _, size, read) ->
        Printf.sprintf "%s = %s + %sconflicts(%s, %d)"
          ido ido (if read then "read" else "write") idi size
   | ACall id | ACallUninterp (id, _, _) ->
@@ -109,13 +109,14 @@ let from_imp_with_annots transformed tick_var
     let node = !next_node in
     Hashtbl.add h_position node pos;
     Hashtbl.add h_annots node a;
+    (*
     (match a with
      | [] -> ()
      | e::_ ->
         Format.fprintf Format.std_formatter "%a should get %d\n"
           IMP_Print.print_expr e
           node
-    );
+    ); *)
     incr next_node;
     node
   in
@@ -406,15 +407,15 @@ let from_imp_with_annots transformed tick_var
        let an = ref None in
        create_pot_assign_edge [] tick_var
          (mk (an) (EAdd (mk (an) (EVar tick_var), mk (an) (ENum n)))) fin pos
-    | IMP.ITickMemReads (id, size, host, read) ->
+    | IMP.ITickMemReads (id, an, size, host, read) ->
        let beg = new_node [] pos in
        let ph = ref None in
-       new_edge beg (AAddMemReads (tick_var, id, ph, size, host, read)) fin;
+       new_edge beg (AAddMemReads (tick_var, id, an, ph, size, host, read)) fin;
        beg
-    | IMP.ITickConflicts (id, size, read) ->
+    | IMP.ITickConflicts (id, an, size, read) ->
        let beg = new_node [] pos in
        let ph = ref None in
-       new_edge beg (AAddConflicts (tick_var, id, ph, size, read)) fin;
+       new_edge beg (AAddConflicts (tick_var, id, an, ph, size, read)) fin;
        beg
     | IMP.IIf (log, bi, be) ->
        let a = eol log in
