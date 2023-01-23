@@ -72,15 +72,15 @@ let rec simpl_instr (dict, cost, is) ip =
      (IdMap.empty, 0, ip::(ITick cost, p)::is)
   (* | ITick n -> (dict, cost + n, is) *)
   | ITick n -> (dict, cost + n, is)
-  | ITickMemReads (id, bits, host, read) ->
+  | ITickMemReads (id, an, bits, host, read) ->
      (match IdMap.find_opt id dict with
       | Some (_, EVar id') ->
-         (dict, cost, (ITickMemReads (id', bits, host, read), p)::is)
+         (dict, cost, (ITickMemReads (id', an, bits, host, read), p)::is)
       | _ -> (dict, cost, ip::is))
-  | ITickConflicts (id, bits, read) ->
+  | ITickConflicts (id, an, bits, read) ->
      (match IdMap.find_opt id dict with
       | Some (_, EVar id') ->
-         (dict, cost, (ITickConflicts (id', bits, read), p)::is)
+         (dict, cost, (ITickConflicts (id', an, bits, read), p)::is)
       | _ -> (dict, cost, ip::is))
 and simpl_block dict b =
   {
@@ -126,8 +126,8 @@ let rec used_vars_instr s (i, _) =
       List.fold_left (fun s e -> IdSet.add e s) s (f::ret::args)
   | IReturn ids ->
      List.fold_left (fun s e -> IdSet.add e s) s ids
-  | ITickMemReads (id, _, _, _)
-    | ITickConflicts (id, _, _) ->
+  | ITickMemReads (id, _, _, _, _)
+    | ITickConflicts (id, _, _, _) ->
      IdSet.add id s
   | _ -> s
 

@@ -13,10 +13,11 @@
 open Format
 open Types
 (* Use the CFG querier for analysis *)
+   (*
 module Cquery_cs = CS_Interop.Make_Graph(Cs_conversion)
 (* For testing .cfg programs *)
 module Cquery_cfg = CS_Interop.Make_Graph(CS_Querier_CFG)
-
+    *)
 let input_file = ref ""
 let main_func = ref None
 let dump_ai = ref false
@@ -304,30 +305,55 @@ let analyze_cu_prog tick_var p m cuda =
          )
          imp_file)
   in
-  let f ((fname :Types.id), (vertex : int)) (_, abs, cu, _) =
-    let ht = List.assoc fname hts in
-    let el = Hashtbl.find_opt ht vertex in
+  let f ?e ((fname :Types.id), (vertex : int)) (_, abs, cu, _) =
+    let el =
+      match e with
+      | Some el -> Some [!el]
+      | None ->
+         let ht = List.assoc fname hts in
+         Hashtbl.find_opt ht vertex
+    in
     
     let bds_for_e e =
       let pe = Polynom.Poly.of_expr e in
+      let open Format in
+      (*
+         fprintf std_formatter "Attaching @<2>[%a@] to %a (vert %d)"
+           (Print.list ~sep:" &&@ "
+               (fun fmt (id, cd) ->
+                 (fprintf fmt "%s = %a" id AI.print_cuda cd)))
+           (AI.M.bindings cu)
+           IMP_Print.print_expr e
+           vertex;
+         print_newline ();
+       *)
       match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
       | Some (lb, ub) ->
-         (*Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
+         (*
+         Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
            IMP_Print.print_expr e
            CUDA.print_cexpr lb
-           CUDA.print_cexpr ub; *)
+           CUDA.print_cexpr ub;
+          *)
          (ann e) := Some (lb, ub)
       | None -> () (*Format.fprintf Format.std_formatter
                "no bounds for %a :(\n"
                IMP_Print.print_expr e *)
     in
     let rec bds_for_e_rec e =
-      bds_for_e e;
-      match desc e with
-      | EAdd (e1, e2)
-        | ESub (e1, e2)
-        | EMul (e1, e2) -> bds_for_e_rec e1; bds_for_e_rec e2
-      | _ -> ()
+      match !(ann e) with
+        Some _ -> ()
+      | None ->
+         (bds_for_e e;
+          match !(ann e) with
+          | None | Some _ ->
+             (match desc e with
+              (* | EAdd (e1, e2) *)
+              | ESub (e1, e2)
+                | EMul (e1, e2) -> bds_for_e_rec e1; bds_for_e_rec e2
+              | _ -> ())
+          | Some _ -> ()
+         )
     in
     match el with
     | None -> ()
@@ -340,19 +366,19 @@ let analyze_cu_prog tick_var p m cuda =
   res
 
 let analyze_cu_prog_no_annots tick_var p m cuda =
-  let (globals, imp_file) : 'a * unit IMP_Types.func list =
+  let (globals, imp_file) : 'a * Graph.annot IMP_Types.func list =
     CUDA_Cost.imp_of_prog p m cuda
   in
   (* let _ = IMP_Print.print_prog Format.std_formatter
      (globals, imp_file) in *)
   (* transform function calls with arguments and return values *)
   let globals, imp_file
-    = IMP.function_call_transformation (fun () -> ()) globals imp_file in
+    = IMP.function_call_transformation (fun () -> ref None) globals imp_file in
   let globals = Utils.add_tick_var tick_var globals in
   let fs = List.map (Graph.from_imp (not !no_sampling_transformation) tick_var)
              imp_file
   in
-  let f ((fname :Types.id), (vertex : int)) _ = () in
+  let f ?e ((fname :Types.id), (vertex : int)) _ = () in
   Graph_AI_Simple.glob_allow_extend := false;
   analyze_prog f tick_var (globals, fs)
   
@@ -393,7 +419,8 @@ let entry () =
     in
     let initres =
       match analyze_cu_prog tick_var p m prog with
-      | Some (_, p) -> Some (p, (CUDA_Types.reannot_prog (fun _ -> ()) prog))
+      | Some (_, p) -> Some (p, prog)
+      (*Some (p, (CUDA_Types.reannot_prog (fun _ -> (ref None)) prog)) *)
       | None -> None
     in
     (* Do all of the optimizing *)
@@ -402,6 +429,8 @@ let entry () =
     let best =
       List.fold_left
         (fun best cuda ->
+          let cuda : Graph.annot CUDA_Types.cprog =
+            CUDA_Types.reannot_prog (fun _ -> ref None) cuda in
           Format.fprintf Format.std_formatter "Analyzing:\n%!";
           (* CUDA.print_cprog Format.std_formatter cuda; *)
           match (analyze_cu_prog_no_annots tick_var p m cuda, best) with

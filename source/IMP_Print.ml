@@ -58,13 +58,13 @@ let rec print_instr fmt i =
   | ICallUninterp (ret, f, args) ->
      fprintf fmt "@[%s =@ %s(%a)@]" ret f print_list args
   | ITick n -> fprintf fmt "tick %d;" n
-  | ITickMemReads (id, bits, host, read) ->
+  | ITickMemReads (id, _, bits, host, read) ->
      fprintf fmt "%smem%ss(%s, %d)"
        (if host then "host" else "global")
        (if read then "read" else "write")
        id
        bits
-  | ITickConflicts (id, bits, read) ->
+  | ITickConflicts (id, _, bits, read) ->
      fprintf fmt "%sconflicts(%s, %d)"
        (if read then "read" else "write")
        id
