@@ -15,8 +15,8 @@ type 'a instr =
   | ILoop of 'a block
   | ICall of id
   | ITick of int
-  | ITickMemReads of id * int * bool * bool (* bits, host, read *)
-  | ITickConflicts of id * int * bool (* bits, read *)
+  | ITickMemReads of id * 'a * int * bool * bool (* bits, host, read *)
+  | ITickConflicts of id * 'a * int * bool (* bits, read *)
   | ICallArg of id list * id * id list (* function call with arguments and return variables *)
   | ICallUninterp of id * id * id list (* function call with arguments and return variables *)
   | IReturn of id list 

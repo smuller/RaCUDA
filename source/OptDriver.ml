@@ -317,6 +317,7 @@ let analyze_cu_prog tick_var p m cuda =
     let bds_for_e e =
       let pe = Polynom.Poly.of_expr e in
       let open Format in
+      (*
          fprintf std_formatter "Attaching @<2>[%a@] to %a (vert %d)"
            (Print.list ~sep:" &&@ "
                (fun fmt (id, cd) ->
@@ -325,16 +326,20 @@ let analyze_cu_prog tick_var p m cuda =
            IMP_Print.print_expr e
            vertex;
          print_newline ();
+       *)
       match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
       | Some (lb, ub) ->
+         (*
          Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
            IMP_Print.print_expr e
            CUDA.print_cexpr lb
            CUDA.print_cexpr ub;
+          *)
          (ann e) := Some (lb, ub)
-      | None -> Format.fprintf Format.std_formatter
+      | None -> ()
+                  (* Format.fprintf Format.std_formatter
                "no bounds for %a :(\n"
-               IMP_Print.print_expr e
+               IMP_Print.print_expr e *)
     in
     let rec bds_for_e_rec e =
       match !(ann e) with
