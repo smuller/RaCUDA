@@ -112,6 +112,7 @@ struct
       with Failure _ -> 
         None 
     in
+    let an = ref None in
     
     let to_prob_branching id e op s_node keys probs =
       let last_key = List.hd (List.rev keys) in
@@ -123,14 +124,14 @@ struct
         let rn' = new_node () in
         new_edge n (AProb p) ln';
         (* edge to fin *)
-        let e' = mk ()
+        let e' = mk (an)
                    (match op with
                     | Dadd ->
-                       EAdd (e, mk () (ENum k))
+                       EAdd (e, mk (an) (ENum k))
                     | Dsub ->
-                       ESub (e, mk () (ENum k))
+                       ESub (e, mk (an) (ENum k))
                     | Dmul ->
-                       EMul (e, mk () (ENum k)))
+                       EMul (e, mk (an) (ENum k)))
         in
         new_edge ln' (AAssign (id, ref e', ref false)) e_node;
         new_edge n (AProb (1. -. p)) rn';
@@ -139,14 +140,14 @@ struct
 
       let last_level_node = List.fold_left create_prob_branching s_node (List.combine keys' probs) in
       (* the last edge *)
-      let e' = mk ()
+      let e' = mk (an)
                    (match op with
                     | Dadd ->
-                       EAdd (e, mk () (ENum last_key))
+                       EAdd (e, mk (an) (ENum last_key))
                     | Dsub ->
-                       ESub (e, mk () (ENum last_key))
+                       ESub (e, mk (an) (ENum last_key))
                     | Dmul ->
-                       EMul (e, mk () (ENum last_key)))
+                       EMul (e, mk (an) (ENum last_key)))
       in
       new_edge last_level_node (AAssign (id, ref e', ref false)) e_node;
       e_node
@@ -323,11 +324,12 @@ struct
      * s_node: starting node
      * e_node: return end node
      *)
+    
     let do_ins s_node ins =
       match ins with
       | CSITick n -> 
          create_assign_edge tick_var
-           (mk () (EAdd (mk () (EVar tick_var), mk () (ENum n)))) s_node
+           (mk (an) (EAdd (mk (an) (EVar tick_var), mk (an) (ENum n)))) s_node
 
       | CSIAssume log ->
         let e_node = new_node () in

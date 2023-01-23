@@ -108,9 +108,9 @@ type transfer =
   | TNone
   | TWeaken
   | TGuard of L.sum DNF.t * ulogic
-  | TAssign of id * Poly.t option * uexpr ref * bool ref
-  | TAddMemReads of id * id * int option ref * int * bool * bool
-  | TAddConflicts of id * id * int option ref * int * bool
+  | TAssign of id * Poly.t option * annot expr ref * bool ref
+  | TAddMemReads of id * id * annot * int option ref * int * bool * bool
+  | TAddConflicts of id * id * annot * int option ref * int * bool
   | TCall of func * func
   | TReturn of func * func
   | TProb of float
@@ -199,13 +199,13 @@ module HyperGraph = struct
             in
             PSHGraph.add_hedge g (new_edge ())
               (TAssign (id, peo, e, br)) ~pred:[|src|] ~succ:[|dst|];
-          | AAddMemReads (ido, idi, ph, size, host, read) ->
+          | AAddMemReads (ido, idi, an, ph, size, host, read) ->
              PSHGraph.add_hedge g (new_edge ())
-               (TAddMemReads (ido, idi, ph, size, host, read))
+               (TAddMemReads (ido, idi, an, ph, size, host, read))
                ~pred:[|src|] ~succ:[|dst|];
-          | AAddConflicts (ido, idi, ph, size, read) ->
+          | AAddConflicts (ido, idi, an, ph, size, read) ->
              PSHGraph.add_hedge g (new_edge ())
-               (TAddConflicts (ido, idi, ph, size, read))
+               (TAddConflicts (ido, idi, an, ph, size, read))
                ~pred:[|src|] ~succ:[|dst|];
           | AProb p -> 
             PSHGraph.add_hedge g (new_edge ())
@@ -352,7 +352,7 @@ let join (p1, p1e, m1, dv1) (p2, p2e, m2, dv2) =
 
 let join_list = List.fold_left join bottom
 let top = ([], [], M.empty, true)
-let print fmt (p, _, m, _) =
+let print fmt (_, p, m, _) =
   let open Format in
   (fprintf fmt "%a" Presburger.print p;
    (Print.list ~sep:" &&@ "
@@ -479,6 +479,17 @@ let bounds abs pe =
     | _ -> failwith "factor not a var"
     
   let bounds_gen (abs, cu) pe =
+    (*
+    let _ =
+      let open Format in
+      ((Print.list ~sep:" &&@ "
+          (fun fmt (id, cd) ->
+            (fprintf fmt "%s = %a" id print_cuda cd))
+          std_formatter
+          (M.bindings cu))
+      )
+    in
+     *)
     let rec bounds_gen_poly depth pe =
       if depth <= 0 then None
       else
@@ -492,9 +503,11 @@ let bounds abs pe =
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
     let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
     let cconst e = emk () (CConst e) in
+    (*
     let _ = Format.fprintf Format.std_formatter "bounds_gen %a\n"
               Poly.print pe
     in
+     *)
     let add_opt b1 b2 =
       match (b1, b2) with
       | (Some b1, Some b2) -> Some (Poly.add b1 b2)
@@ -555,10 +568,11 @@ let bounds abs pe =
         bounds abs
           (Poly.of_monom (Monom.of_factor f e) 1.0)
       in
+      (*
       Format.fprintf Format.std_formatter "%d lbs, %d ubs\n"
         (List.length lbs)
         (List.length ubs);
-      
+       *)
       match (List.filter (filter_bds f) lbs,
              List.filter (filter_bds f) ubs)
       with
@@ -568,14 +582,17 @@ let bounds abs pe =
            let (plb, pub) = (bd_to_poly false lb',
                              bd_to_poly true ub')
            in
+           (*
            let _ = Format.fprintf Format.std_formatter
                      "lb: %a\nub: %a\n"
                      Poly.print plb
                      Poly.print pub
            in
+            *)
            Some (plb, pub)
          else
-           (Format.fprintf Format.std_formatter "Negative lb\n"; None)
+           ((*Format.fprintf Format.std_formatter "Negative lb\n";*)
+            None)
       | _ -> None
     in
     Poly.fold (fun m k ->
@@ -617,13 +634,14 @@ let bounds abs pe =
        (match (Poly.toCUDA plb, Poly.toCUDA pub)
         with
         | (Some clb, Some cub) ->
-           (Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
+           (
+             (* Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
               Poly.print pe
               CUDA.print_cexpr clb
-              CUDA.print_cexpr cub;
+              CUDA.print_cexpr cub; *)
             Some (clb, cub))
-        | _ -> Format.fprintf Format.std_formatter "None\n"; None)
-    | None -> (Format.fprintf Format.std_formatter "None\n"; None)
+        | _ -> (*Format.fprintf Format.std_formatter "None\n";*) None)
+    | None -> ((*Format.fprintf Format.std_formatter "None\n";*) None)
 
   let make_fpmanager graph widening apply =
     let info = PSHGraph.info graph in
@@ -866,17 +884,20 @@ let bounds abs pe =
                  true)
     | _ -> cuda_unif
 
-  let apply_TAssign params (abs, abse, m, d) id (peo, e, is_pot) =
+  let apply_TAssign (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit)
+        params (abs, abse, m, d) id (peo, (e : annot Types.expr ref), is_pot) =
+    (* let _ = f ~e:e ("", 0) (abs, abse, m, d) in *)
+    let an = ann !e in
     let _ = match (params, desc !e) with
       | (Some (_, metric), EAdd ((_, EVar ov), (_, EVar v))) ->
          if String.compare v CUDA_Config.div_cost = 0
          then
-           e := mk () (EAdd (mk () (EVar ov),
-                             mk () (ENum (metric CUDA_Cost.KDivWarp))))
+           e := mk (an) (EAdd (mk (an) (EVar ov),
+                             mk (an) (ENum (metric CUDA_Cost.KDivWarp))))
          else
            (match M.find_opt v !known_temps with
             | Some n -> ((* Printf.printf "found\n"; *)
-                         e := mk () (EAdd (mk () (EVar ov), mk () (ENum n))))
+                         e := mk (an) (EAdd (mk (an) (EVar ov), mk (an) (ENum n))))
             | None -> () (*
                       let l = match M.find_opt v !waiting_temps with
                         | Some l -> l
@@ -1554,21 +1575,21 @@ let bounds abs pe =
           m)
       , dv)
 
-  let apply f
+  let apply (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit)
         pm graph hedge tabs =
     (* let _ = Printf.printf "apply %d\n%!" hedge in *)
     let gs = (PSHGraph.info graph).HyperGraph.globs in
     let pred = (PSHGraph.predvertex graph hedge).(0) in
-    let _ = f pred tabs.(0) in
+    (* let _ = f pred tabs.(0) in *)
     let transfer = PSHGraph.attrhedge graph hedge in
     let res =
       match transfer with
       | TGuard (disj, log) -> apply_TGuard tabs.(0) (disj, log)
       | TNotUnique lr -> apply_TNotUnique tabs.(0) lr
       | TUnique _ -> tabs.(0)
-      | TAssign (id, pe, e, pr) -> apply_TAssign pm tabs.(0) id (pe, e, pr)
+      | TAssign (id, pe, e, pr) -> apply_TAssign f pm tabs.(0) id (pe, e, pr)
       | TCall _ -> apply_TCall gs tabs.(0)
-      | TAddMemReads (ido, idi, ph, size, host, read) ->
+      | TAddMemReads (ido, idi, _, ph, size, host, read) ->
          let abs = apply_MemReads pm tabs.(0) ido idi ph size host read in
          abs (*
          (match !ph with
@@ -1576,7 +1597,7 @@ let bounds abs pe =
           | Some n ->
              let e = EAdd (ENum n, EVar ido) in
              apply_TAssign pm abs ido (Some (Poly.of_expr e), ref e)) *)
-      | TAddConflicts (ido, idi, ph, size, read) ->
+      | TAddConflicts (ido, idi, _, ph, size, read) ->
          let abs = apply_BankConflicts pm tabs.(0) ido idi ph size read in
          abs (*
          (match !ph with
@@ -1613,7 +1634,7 @@ let bounds abs pe =
        m1 m2
     , dv1 || dv2)
 
-  let compute f pm graph fstart =
+  let compute (f: ?e:annot Types.expr ref -> Types.id * int -> absval -> unit) pm graph fstart =
     let info = PSHGraph.info graph in
     let fs = Hashtbl.find info.HyperGraph.funch fstart in
     let _ = args := fs.fun_args in
@@ -1655,12 +1676,12 @@ let debug_print fmt info graph res =
     | TAssign (v, Some pe, _, br) ->
        Format.fprintf fmt "Assign[%s] %s = %a"
          (if !br then "P" else "D") v Poly.print_ascii pe;
-    | TAddMemReads (ido, idi, _, size, host, read) ->
+    | TAddMemReads (ido, idi, _, _, size, host, read) ->
        Format.fprintf fmt "Assign %s = %s + mem%ss(%s, %s, %d)"
          ido ido (if read then "read" else "write") idi
          (if host then "Host" else "Global")
          size
-    | TAddConflicts (ido, idi, _, size, read) ->
+    | TAddConflicts (ido, idi, _, _, size, read) ->
        Format.fprintf fmt "Assign %s = %s + %sconflicts(%s, %d)"
          ido ido (if read then "read" else "write") idi size
     | TCallUninterp (id, f, ids) ->
@@ -1670,20 +1691,20 @@ let debug_print fmt info graph res =
          ids
   in
   let print_hedge_attr fmt hedge transfer =
-    Format.fprintf fmt "%a" print_transfer transfer
+    Format.fprintf fmt "%d: %a" hedge print_transfer transfer
   in
   PSHGraph.print_dot
     begin fun fmt (vf, vn) -> Format.fprintf fmt "%s_%d" vf vn end
     begin fun fmt hid -> Format.fprintf fmt "e_%d" hid end
     begin fun fmt v _ ->
-      print fmt (PSHGraph.attrvertex res v)
+      Format.fprintf fmt "%d: %a" (snd v) print (PSHGraph.attrvertex res v)
     end
     print_hedge_attr
     fmt graph
 
 (* Common API for abstract interpretation modules. *)
 
-let analyze ?f:(f : Types.id * int -> absval -> unit = fun _ _ -> ()) ~dump pm (gl, fl) fstart =
+let analyze ?f:(f : ?e:annot Types.expr ref -> Types.id * int -> absval -> unit = fun ?e _ _ -> ()) ~dump pm (gl, fl) fstart =
   let _ = Printf.printf "analyzing with allow_extend=%b\n%!" (!glob_allow_extend) in
   let graph = HyperGraph.from_program (gl, fl) in
   let _ = Printf.printf "got graph\n%!" in
@@ -1691,6 +1712,25 @@ let analyze ?f:(f : Types.id * int -> absval -> unit = fun _ _ -> ()) ~dump pm (
   (* let _ = Printf.printf "got info\n%!" in *)
   let (fpman, res) = Solver.compute f pm graph fstart in
   let _ = Printf.printf "solved\n%!" in
+  (* let _ = PSHGraph.iter_vertex graph
+            (fun v abs ~pred ~succ ->
+              f v (PSHGraph.attrvertex res v)
+            )
+  in
+   *)
+  let _ = PSHGraph.iter_hedge graph
+            (fun _ transfer ~pred ~succ ->
+              match transfer with
+              | TAssign (_, _, e, _) ->
+                 let abs = PSHGraph.attrvertex res pred.(0) in
+                 f ~e:e pred.(0) abs
+              | TAddMemReads (_, id, ann, _, _, _, _)
+                | TAddConflicts (_, id, ann, _, _, _) ->
+                 let abs = PSHGraph.attrvertex res pred.(0) in
+                 f ~e:(ref (mk ann (EVar id))) pred.(0) abs
+              | _ -> ()
+            )
+  in
   if dump then begin
     let fn = "simple_ai.dot" in 
     let oc = open_out fn in
