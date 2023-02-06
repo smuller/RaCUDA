@@ -772,7 +772,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
                                      Some (thread_position_var))
                                      (Some tvar_as_exp)
                     ),
-                    (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some  (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str))))))) (Some tvar_as_exp)))) ,true))
+                    (emk () (CL (param_to_clval (id, bt, Some  (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str))))))) (Some tvar_as_exp)))) ,true))
         ]) in 
 
       let param_id_to_shared id = 
@@ -791,7 +791,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
                                      Some (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))))
                                      (Some tvar_as_exp)
                     ),
-                    (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some (thread_position_var)) (Some tvar_as_exp)))) ,true)) in
+                    (emk () (CL (param_to_clval (id, bt, Some (thread_position_var)) (Some tvar_as_exp)))) ,true)) in
 
         let param_id_to_global id = 
           let param_pair = List.find (fun (x, _) -> x = id) params in

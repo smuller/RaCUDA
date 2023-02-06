@@ -218,8 +218,6 @@ module MkPoly(Mon: Monom)
   let compare = (M.compare compare: t -> t -> int)
   let fold = M.fold
 
-  let always_less a b = true
-
   (* p = k.m *)
   let of_monom m k = M.singleton m k
 
@@ -345,6 +343,39 @@ module MkPoly(Mon: Monom)
 
   let print_ascii = print true
   let print = print false
+
+  let always_less a b =
+    let find_or_zero k m =
+      try M.find k m with Not_found -> 0.0
+    in
+    let _ = Format.fprintf Format.std_formatter "%a always less than %a?\n"
+              print a
+              print b
+    in
+    let ans =
+    M.for_all
+      (fun k ca -> ca <= find_or_zero k b || Mon.is_one k)
+      a
+    &&
+      M.for_all
+        (fun k cb -> find_or_zero k a <= cb || Mon.is_one k)
+        b
+    in
+    Format.fprintf Format.std_formatter "%s\n\n"
+      (if ans then "Yes" else "No");
+    ans
+    (*
+    let binds_a = M.bindings a in
+    let binds_b = M.bindings b in
+    let f r (ka, ca) (kb, cb) =
+      r && ka = kb && ca < cb
+    in
+    
+      try
+        List.fold_left2 f true binds_a binds_b
+      with Invalid_argument _ -> false
+    in
+     *)
 
   let zero () = zero
 
