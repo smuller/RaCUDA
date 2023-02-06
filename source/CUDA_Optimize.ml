@@ -33,7 +33,7 @@ let log_to_level log_str =
   | _ -> let () = Format.fprintf Format.std_formatter "Invalid Logging Level! Setting logging level to Debug" in 1
 
 (* Set the logging level here *)
-let logging_level = log_to_level("debug")
+let logging_level = log_to_level("info")
 
 let should_log log = log_to_level(log) >= logging_level 
 
@@ -513,7 +513,7 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
 (* This is really inefficient, we should fix it *)
 let rec branch_distribution (c: int) ((a, code_block): 'a cblock) =
 
-  let () = if should_log "info" then Format.fprintf Format.std_formatter "Running Branch Distribution with cutoff of %d \n" c in
+  let () = if should_log "info" then Format.fprintf Format.std_formatter "\nRunning Branch Distribution with cutoff of %d \n" c in
 
   let rec bd_ll a code_block =
     let bd_ll = bd_ll a in
@@ -724,12 +724,14 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
     let () = clean_hashtbl in 
     let print_hashtbl = 
-      let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "info" then Format.fprintf Format.std_formatter "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
-      let print_bounds_for_id id = let () = if should_log "info" then Format.fprintf Format.std_formatter "------ Bounds for ID of %s --------- \n" id in let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
+      let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "debug" then Format.fprintf Format.std_formatter "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
+      let print_bounds_for_id id = let () = if should_log "debug" then Format.fprintf Format.std_formatter "------ Bounds for ID of %s --------- \n" id in let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
       let _ = (List.map print_bounds_for_id array_param_ids) in  () in
     let () = print_hashtbl in 
 
     (* Helper code for code generation portion *)
+
+    let thread_position_var = emk () (CAdd((emk () (CMul(emk () (CL(CVar("blockIdx.x"))), emk () (CL(CVar("blockDim.x")))))), emk () (CL(CVar("threadIdx.x"))))) in
 
     let get_pointer_bt t = 
       match t with
@@ -756,27 +758,21 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       let bring_bound_to_shared (id, bt) (_, lb, ub, variant_num) = (
         let pointer_bt = get_pointer_bt bt in
         let variant_num_str = string_of_int variant_num in
-        let tvar = CVar("__itertemp") in
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         [
-          CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
+          (* CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
           CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
-          CDecl ("upper_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
-          CAssign(CVar("upper_bound_" ^ id ^ variant_num_str), expr_eval ub, true);
+          (* CDecl ("upper_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
+          (* CAssign(CVar("upper_bound_" ^ id ^ variant_num_str), expr_eval ub, true); *)
           CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
-          CAssign(CVar("size_" ^ id ^ variant_num_str), emk () (CSub(emk () (CL(CVar("upper_bound_" ^ id ^ variant_num_str))), emk() (CL(CVar("lower_bound_"^ id ^ variant_num_str))))), true);
-          CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("size_"^ id ^ variant_num_str)), []);
-          (CFor ([CDecl ("__itertemp", Local, C.INT(C.LONG, C.SIGNED), []);
-                  CAssign (tvar, emk() (CConst(CInt 0)), true)],
-                  CCmp (tvar_as_exp, Le, emk() (CL((CVar("size_" ^ id ^ variant_num_str))))),
-                  [CAssign (tvar, emk () (CAdd (tvar_as_exp,
-                                          (emk () (CL(CVar("blockSize.x")))))), true)],
-                  ((),                              
-                  [(CAssign ((param_to_clval (id ^ variant_num_str, bt, Some (emk () (CL(CVar("__itertemp")))))
-                              (Some tvar_as_exp)
-                              ),
-                              (emk () (CL (param_to_clval (id, bt, Some (emk () (CAdd(emk () (CL(CVar("__itertemp"))), emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))))
-                                            (Some tvar_as_exp)))) ,true))])))
+          (* CAssign(CVar("size_" ^ id ^ variant_num_str), emk () (CSub(emk () (CL(CVar("upper_bound_" ^ id ^ variant_num_str))), emk() (CL(CVar("lower_bound_"^ id ^ variant_num_str))))), true); *)
+          CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("blockDim.x")), []);
+          (CAssign ((param_to_clval (id ^ variant_num_str,
+                                     bt,
+                                     Some (thread_position_var))
+                                     (Some tvar_as_exp)
+                    ),
+                    (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some  (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str))))))) (Some tvar_as_exp)))) ,true))
         ]) in 
 
       let param_id_to_shared id = 
@@ -788,20 +784,14 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     
     let shared_back_to_global = 
       let shared_back_to_global_helper (id, bt) (_, lb, ub, variant_num)=
-        let tvar = CVar("__itertemp") in
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
-        let variant_num_str = string_of_int variant_num in
-          (CFor ([CDecl ("__itertemp", Local, C.INT(C.LONG, C.SIGNED), []);
-          CAssign (tvar, emk() (CConst(CInt 0)), true)],
-          CCmp (tvar_as_exp, Le, emk() (CL((CVar("size_" ^ id ^ variant_num_str))))),
-          [CAssign (tvar, emk () (CAdd (tvar_as_exp,
-                                  (emk () (CL(CVar("blockSize.x")))))), true)],
-          ((),                              
-          [(CAssign ((param_to_clval (id, bt, Some (emk () (CAdd(emk () (CL(CVar("__itertemp"))), emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))))
-                      (Some tvar_as_exp)
-                      ),
-                      (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some (emk () (CL(CVar("__itertemp")))))
-                                    (Some tvar_as_exp)))) ,true))]))) in
+        let variant_num_str = string_of_int variant_num in                            
+          (CAssign ((param_to_clval (id ^ variant_num_str,
+                                     bt,
+                                     Some (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))))
+                                     (Some tvar_as_exp)
+                    ),
+                    (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some (thread_position_var)) (Some tvar_as_exp)))) ,true)) in
 
         let param_id_to_global id = 
           let param_pair = List.find (fun (x, _) -> x = id) params in
@@ -935,10 +925,12 @@ let branch_distribution_mult (prog: 'a cprog) =
   let (_, _, params, _, _) = List.hd funcs in
 
   let array_params = List.filter is_param_bt_array params in
-  let used_array_param_combinations = combnk (List.length array_params) array_params in
+  let used_array_param_combinations = List.flatten (List.map (fun n -> combnk (n-1) array_params) (List.init (List.length array_params+1) (fun x -> x + 1))) in
 
   let bdp c used_array_params = branch_distribution_prog c prog used_array_params in
-  let bdp_params used_arra_params = [bdp 0 used_arra_params; bdp 10 used_arra_params] in
+
+  (* bdp_params produces a list of (branch_distribution_cutoff, used_array_params, code) *)
+  let bdp_params used_array_params = [(0, used_array_params, bdp 0 used_array_params); (0, used_array_params, bdp 10 used_array_params)] in
   
   List.flatten (List.map bdp_params used_array_param_combinations)
   
