@@ -112,8 +112,10 @@ let cmetric_debug c =
 
 let cmetric_steps c =
   match c with
-  | KArrRead (_, n) -> n
-  | KArrAssign (_, n) -> n
+  | KArrRead (Global, n) -> 5 * n
+  | KArrAssign (Global, n) -> 5 * n
+  | KArrRead (Shared, n) -> n
+  | KArrAssign (Shared, n) -> n
   | KDivWarp -> 0
   | KElse -> 0
   | KThen -> 0

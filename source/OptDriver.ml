@@ -441,7 +441,7 @@
            | (Some (annot, p), None) -> Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
            | (Some (_, p), Some (best_cutoff,best_params,best_poly, best_prog)) ->
               if Polynom.Poly.always_less p best_poly then
-                Some (best_cutoff, best_params, best_poly, best_prog)
+                Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
               else
                 best
          )
