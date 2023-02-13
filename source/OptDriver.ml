@@ -147,7 +147,7 @@
    let ls' = String.length s' and ls = String.length s in
    ls' >= ls && String.sub s' (ls' - ls) ls = s
  
- let analyze_prog annotf tick_var (globals, g_funcl) =
+ let analyze_prog annotf tick_var (globals, g_funcl) fmt =
    (* for testing: the CFG *)
    if !dump_cfg then
      begin
@@ -238,19 +238,19 @@
      in
      
      (* print the result *)
-     printf "@.%s:@.    @[<v>" f_name;
+     Format.fprintf fmt "@.%s:@.    @[<v>" f_name;
      
      (match st_results with
       | None ->
-         printf "Sorry, I could not find a bound@ "
+          Format.fprintf fmt "Sorry, I could not find a bound@ "
       | Some (annots, p) -> 
          begin
            match !analysis_type with
            | Analysis.Water_mark -> 
-              printf "Bound: %a@ " poly_print (CUDA.lookup_poly
+              Format.fprintf fmt "Bound: %a@ " poly_print (CUDA.lookup_poly
                                                  (Polynom.Poly.sub p query))
            | Analysis.Size_change -> 
-              printf "Bound: %a@ " poly_print (CUDA.lookup_poly
+              Format.fprintf fmt "Bound: %a@ " poly_print (CUDA.lookup_poly
                                                  (Polynom.Poly.sub p query))
          end;
          Format.printf "Degree: %d@ " (Polynom.Poly.degree p);
@@ -259,12 +259,12 @@
          if !dump_stats then 
            begin
              let { Analysis.num_lpvars; num_lpcons; max_focus; lp_runtime } = Analysis.stats in
-             printf "Number of LP variables: %d@ " num_lpvars;
-             printf "Number of LP constraints: %d@ " num_lpcons;
-             printf "Maximum focus functions in use: %d@ " max_focus;
-             printf "LP solver time: %.3fs@ " !lp_runtime
+             Format.fprintf fmt "Number of LP variables: %d@ " num_lpvars;
+             Format.fprintf fmt "Number of LP constraints: %d@ " num_lpcons;
+             Format.fprintf fmt "Maximum focus functions in use: %d@ " max_focus;
+             Format.fprintf fmt "LP solver time: %.3fs@ " !lp_runtime
            end;
-         printf "@]@.";
+           Format.fprintf fmt "@]@.";
      );
      st_results
    in
@@ -366,7 +366,7 @@
    Graph_AI_Simple.glob_allow_extend := false;
    res
  
- let analyze_cu_prog_no_annots tick_var p m cuda =
+ let analyze_cu_prog_no_annots tick_var p m cuda fmt=
  
    let (globals, imp_file) : 'a * Graph.annot IMP_Types.func list =
          CUDA_Cost.imp_of_prog p m cuda
@@ -382,7 +382,7 @@
        in
        let f ?e ((fname :Types.id), (vertex : int)) _ = () in
        Graph_AI_Simple.glob_allow_extend := false;
-       analyze_prog f tick_var (globals, fs)
+       analyze_prog f tick_var (globals, fs) fmt
    
    
  (* entry point *)
@@ -402,6 +402,14 @@
    (* analysis function *)
    let main_optimize () = 
  
+     let outc = match(!output_opt) with 
+      | None -> open_out "Useless.txt"
+      | Some file -> open_out file in 
+
+     let fmt = match(!output_opt) with 
+      | None -> Format.std_formatter
+      | Some file -> Format.formatter_of_out_channel outc in
+
      let prog = try
       (* CFG: if input fule is in CUDA-C format *)
        if ends_with ".cu" !input_file then
@@ -421,22 +429,27 @@
          raise Utils.Error
      in
      let initres =
-       match analyze_cu_prog tick_var p m prog with
-       | Some (_, p) -> Some (0, [], p, prog)
+       match analyze_cu_prog tick_var p m prog fmt with
+       | Some (_, p) -> Some (~-1, [], p, prog)
        (*Some (p, (CUDA_Types.reannot_prog (fun _ -> (ref None)) prog)) *)
        | None -> None
      in
      (* Do all of the optimizing *)
-     let opts = CUDA_Optimize.branch_distribution_mult prog in
+     let opts = CUDA_Optimize.branch_distribution_mult prog fmt in
      let best =
        List.fold_left
          (fun best cuda ->
            let (branch_distribution_cutoff, used_array_params, cuda_code) = cuda in
            let cuda_code : Graph.annot CUDA_Types.cprog =
              CUDA_Types.reannot_prog (fun _ -> ref None) cuda_code in
-           Format.fprintf Format.std_formatter "Analyzing:\n%!";
+           let () = if branch_distribution_cutoff >= 0 then
+             Format.fprintf fmt "Analysis for Branch Distribution of %d \n" branch_distribution_cutoff
+            else Format.fprintf fmt "Analysis for No Branch Distribution\n"in
+
+            let () = Format.fprintf fmt "Running Global to Shared on array params: [%s]" (String.concat "," (List.map (fun (x,_) -> x) used_array_params)) in
+
            (* CUDA.print_cprog Format.std_formatter cuda; *)
-           match (analyze_cu_prog_no_annots tick_var p m cuda_code, best) with
+           match (analyze_cu_prog_no_annots tick_var p m cuda_code fmt, best) with
            | (None, _) -> best
            | (Some (annot, p), None) -> Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
            | (Some (_, p), Some (best_cutoff,best_params,best_poly, best_prog)) ->
@@ -453,20 +466,12 @@
      | Some (branch_distribution_cutoff,array_params,bound, cuda) ->
  
         let param_ids = List.map (fun (id, _) -> id) array_params in
-        let () = Format.fprintf Format.std_formatter "\nBest Code generation:\n" in
-        let _ = CUDA.print_cprog Format.std_formatter cuda in 
-        let () = Format.fprintf Format.std_formatter "\nOptimal Branch Distribution cutoff: %d\n" branch_distribution_cutoff in
-        let () = Format.fprintf Format.std_formatter "Optimal Params to move to shared: [%s]\n" (String.concat "," param_ids) in
-        let () = Polynom.Poly.print_ascii Format.std_formatter bound in
-        (match !output_opt with
-         | None -> 0
-         | Some file ->
-            let outc = open_out file in
-            let fmt = Format.formatter_of_out_channel outc in
-            let fmtt = Format.make_formatter (fun _ _ _ -> ()) (fun _ -> ()) in
-            CUDA.print_cprog fmtt cuda;
-            close_out outc;
-            0)
+        let () = Format.fprintf fmt "\nBest Code generation:\n" in
+        let _ = CUDA.print_cprog fmt cuda in 
+        let () = Format.fprintf fmt "\nOptimal Branch Distribution cutoff: %d\n" branch_distribution_cutoff in
+        let () = Format.fprintf fmt "Optimal Params to move to shared: [%s]\n" (String.concat "," param_ids) in
+        let () = Polynom.Poly.print_ascii fmt bound in
+        let () = close_out outc in 0
    in
    (* measure the total runtime *)
    try 
@@ -474,7 +479,17 @@
      (* print statistic information for the analysis of the whole program *)
      if !dump_stats then 
        begin
-         printf "@.Program Statistics:@.    @[<v>";
+
+        let outc = match(!output_opt) with 
+        | None -> open_out "Useless.txt"
+        | Some file -> open_out_gen [Open_append] 0o640 file in
+  
+       let fmt = match(!output_opt) with 
+        | None -> Format.std_formatter
+        | Some file -> Format.formatter_of_out_channel outc in
+
+
+         Format.fprintf fmt "@.Program Statistics:@.    @[<v>";
          (*
          let { Graph.weaken_map } = Graph.stats in
          if not !no_weaken then 
@@ -486,8 +501,9 @@
              printf "@]@ ";
            end;
          *)
-         printf "Total runtime: %.3fs" !total_runtime;
-         printf "@]@.";
+         Format.fprintf fmt "Total runtime: %.3fs" !total_runtime;
+         Format.fprintf fmt "@]@.";
+         close_out outc;
        end;
      retcode
    with Utils.Error -> 2

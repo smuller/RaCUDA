@@ -479,12 +479,12 @@ and get_complexity_scores ((_, block) : 'a cblock) : int =
   get_complexity_scores_l block
 
 (** Return type is (Common, lst1 prev, lst1 after, lst2 prev, lst2 after) *)
-let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
-      (complexity_cutoff: int) =
+let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock) 
+      (complexity_cutoff: int) fmt =
   let arr1 = Array.of_list lst1 and arr2 = Array.of_list lst2 in
   let m = Array.length arr1 and n = Array.length arr2 in
-  let () = if should_log "debug" then Format.fprintf Format.std_formatter "Length of array 1 is %d \n" m in
-  let () = if should_log "debug" then Format.fprintf Format.std_formatter "Length of array 2 is %d \n" n in
+  let () = if should_log "debug" then Format.fprintf fmt "Length of array 1 is %d \n" m in
+  let () = if should_log "debug" then Format.fprintf fmt "Length of array 2 is %d \n" n in
   let counter = Array.make_matrix (m+1) (n+1) 0 in
   let max_complexity = ref 0 in
   let lcs = ref (None, None, None, None, None) in
@@ -496,7 +496,7 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
         let complexity = get_complexity_scores_l (Array.to_list (Array.sub arr1 (i-c+1) c)) in
         (* let () = Format.fprintf Format.std_formatter "C = %d, I = %d, J = %d\n" c i j in  *)
         if complexity > !max_complexity then
-          let () = Format.fprintf Format.std_formatter "" in
+          let () = Format.fprintf fmt "" in
           max_complexity := complexity;
           if !max_complexity >= complexity_cutoff then
           lcs := (Some (Array.to_list (Array.sub arr1 (i-c+1) c)),
@@ -507,13 +507,13 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
         else lcs := !lcs;
         done
       done;
-  let () = if should_log "debug" then Format.fprintf Format.std_formatter "Maximum complexity is %d \n" !max_complexity in
+  let () = if should_log "debug" then Format.fprintf fmt "Maximum complexity is %d \n" !max_complexity in
  !lcs
 
 (* This is really inefficient, we should fix it *)
-let rec branch_distribution (c: int) ((a, code_block): 'a cblock) =
+let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
 
-  let () = if should_log "info" then Format.fprintf Format.std_formatter "\nRunning Branch Distribution with cutoff of %d \n" c in
+  let () = if should_log "info" then Format.fprintf fmt "\nRunning Branch Distribution with cutoff of %d \n" c in
 
   let rec bd_ll a code_block =
     let bd_ll = bd_ll a in
@@ -524,7 +524,7 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) =
      match code with 
      | CIf (logic, block1, block2) -> 
        (
-         match longest_common_codeblock block1 block2 c with
+         match longest_common_codeblock block1 block2 c fmt with
          | (None, None, None, None, None) ->
             [CIf (logic, bd_bb block1,
                   bd_bb block2)]
@@ -592,10 +592,10 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
         | C.PTR _ | C.ARRAY _ -> true
         | _ -> false 
 
-    let new_global_to_shared_opt (t, id, params, block, b) used_params : unit cfunc = (
+    let new_global_to_shared_opt (t, id, params, block, b) used_params fmt : unit cfunc = (
     (* Some helper functions*)
     let print_debug (id, lbs, ubs) =
-      if should_log "debug" then Format.fprintf Format.std_formatter "ID of %s in with LBS %a AND UBS %a\n"
+      if should_log "debug" then Format.fprintf fmt "ID of %s in with LBS %a AND UBS %a\n"
       id
       CUDA.print_cexpr (expr_eval lbs)
       CUDA.print_cexpr (expr_eval ubs) in
@@ -608,7 +608,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     let used_array_params = List.filter (is_in_used) array_params in
 
     let array_param_ids = List.map (fun (id, _) -> id) used_array_params in 
-    let () = if should_log "info" then Format.fprintf Format.std_formatter "Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
+    let () = if should_log "info" then Format.fprintf fmt "Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
 
     (* Now start looking at the blocks *)
 
@@ -702,7 +702,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
       let clean_single_id id = 
         let values = Hashtbl.find_all bounds_hashtbl id in
-        let () = if List.mem None values then if should_log "warn" then Format.fprintf Format.std_formatter "%s is missing bounds \n" id else () in
+        let () = if List.mem None values then if should_log "warn" then Format.fprintf fmt "%s is missing bounds \n" id else () in
         let non_none_values = List.map to_result (List.filter is_some values) in
 
         let rec helper (vals) (current) = 
@@ -724,8 +724,8 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
     let () = clean_hashtbl in 
     let print_hashtbl = 
-      let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "debug" then Format.fprintf Format.std_formatter "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
-      let print_bounds_for_id id = let () = if should_log "debug" then Format.fprintf Format.std_formatter "------ Bounds for ID of %s --------- \n" id in let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
+      let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "debug" then Format.fprintf fmt "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
+      let print_bounds_for_id id = let () = if should_log "debug" then Format.fprintf fmt "------ Bounds for ID of %s --------- \n" id in let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
       let _ = (List.map print_bounds_for_id array_param_ids) in  () in
     let () = print_hashtbl in 
 
@@ -905,18 +905,21 @@ type cfunc = string * (id * Cabs.base_type) list * cblock * bool
 type cprog = (id * Cabs.base_type * mem) list * cfunc list
  *)
 
- let branch_distribution_prog (cutoff: int) ((globals, funcs): 'a cprog) (used_args) =
+ let branch_distribution_prog (cutoff: int) ((globals, funcs): 'a cprog) (used_args) fmt =
 
   (* let bdf_2 (rt, name, args, code, kernel) = new_global_to_shared_opt (rt, name, args, branch_distribution cutoff code, kernel)
   in let () = List.hd(List.map bdf_2 funcs) in *)
 
   let bdf (rt, name, args, code, kernel) =
-    let distributed = branch_distribution cutoff code in 
-    new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args
+    let distributed = 
+      if cutoff > ~-1 
+        then branch_distribution cutoff code fmt
+        else (let _ = if should_log "info" then Format.fprintf fmt "\nNot running branch distribution \n" in code) in 
+    new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args fmt
   in
   (globals, List.map bdf funcs)
    
-let branch_distribution_mult (prog: 'a cprog) =
+let branch_distribution_mult (prog: 'a cprog) fmt =
 
   let (globals, funcs) = prog in
 
@@ -927,10 +930,10 @@ let branch_distribution_mult (prog: 'a cprog) =
   let array_params = List.filter is_param_bt_array params in
   let used_array_param_combinations = List.flatten (List.map (fun n -> combnk (n-1) array_params) (List.init (List.length array_params+1) (fun x -> x + 1))) in
 
-  let bdp c used_array_params = branch_distribution_prog c prog used_array_params in
+  let bdp c used_array_params = branch_distribution_prog c prog used_array_params fmt in
 
   (* bdp_params produces a list of (branch_distribution_cutoff, used_array_params, code) *)
-  let bdp_params used_array_params = [(0, used_array_params, bdp 0 used_array_params); (0, used_array_params, bdp 10 used_array_params)] in
+  let bdp_params used_array_params = [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params); (10, used_array_params, bdp 10 used_array_params)] in
   
   List.flatten (List.map bdp_params used_array_param_combinations)
   
@@ -959,11 +962,11 @@ let rec apply_optimizations (block:cblock) (transformations: (CUDA_Types.cinstr 
 
 
 
-let cf_func (rt, name, args, body, is_kernel) =
+(* let cf_func (rt, name, args, body, is_kernel) =
   new_global_to_shared_opt (rt, name, args, branch_distribution 3 body, is_kernel)
 
 let cf_prog (decls, funcs) =
-  (decls, List.map cf_func funcs)
+  (decls, List.map cf_func funcs) *)
 
   (*
 let input_file = Sys.argv.(1)
