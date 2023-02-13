@@ -352,13 +352,26 @@ module MkPoly(Mon: Monom)
               print a
               print b
     in
+    let float_le a b =
+      a -. b < 0.01
+    in
     let ans =
     M.for_all
-      (fun k ca -> ca <= find_or_zero k b || Mon.is_one k)
+      (fun k ca ->
+        if not (float_le ca (find_or_zero k b) || Mon.is_one k) then
+          (Format.fprintf Format.std_formatter "%f > %f\n"
+             ca (find_or_zero k b);
+           false)
+        else true)
       a
     &&
       M.for_all
-        (fun k cb -> find_or_zero k a <= cb || Mon.is_one k)
+        (fun k cb ->
+          if not (float_le (find_or_zero k a) cb || Mon.is_one k) then
+            (Format.fprintf Format.std_formatter "%f > %f\n"
+               (find_or_zero k a) cb;
+             false)
+          else true)
         b
     in
     Format.fprintf Format.std_formatter "%s\n\n"
