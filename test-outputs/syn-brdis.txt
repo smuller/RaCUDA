@@ -1,0 +1,208 @@
+
+brdis:
+    Bound: 9 + 16 max(0, M) max(0, N) + 64 max(0, N)
+    Number of LP variables: 676449
+    Number of LP constraints: 517790
+    Maximum focus functions in use: 6068
+    LP solver time: 21.756s
+    
+
+ MAX COMPLEXITY IS 11 
+
+Running Branch Distribution with cutoff of 10 
+Running Global to Shared on array params: []
+
+Running Branch Distribution with cutoff of 0 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+brdis:
+    Bound: 9 + 16 max(0, M) max(0, N) + 64 max(0, N)
+    Number of LP variables: 676449
+    Number of LP constraints: 517790
+    Maximum focus functions in use: 6068
+    LP solver time: 10.512s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: []
+brdis:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ brdis ( int N,  int M,  int val) {
+                        
+                            __shared__ otherA[M];
+                            __shared__ otherB[M];
+                            int i;
+                            i = 0;
+                            for (nothing! i < N; i = i + 1) {
+                            
+                                if ((threadIdx.x + i) %% 2 == 0) {
+                                
+                                    int j;
+                                    j = 0;
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        A[j] = val; 
+                                    }
+                                } else {
+                                
+                                    int j;
+                                    j = 0;
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        A[j] = val * 2; 
+                                    } 
+                                } 
+                                int tot;
+                                tot = 0;
+                                int j;
+                                j = 0;
+                                for (nothing! j < M; j = j + 1) {
+                                
+                                    tot = tot + A[j];
+                                    B[j] = tot; 
+                                }
+                                int j;
+                                j = 0;
+                                if ((threadIdx.x + i) %% 2 == 0) {
+                                
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        B[j] = B[j] + val; 
+                                    }
+                                } else {
+                                
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        B[j] = B[j] * B[j]; 
+                                    } 
+                                }  
+                            } 
+                        }
+    Analysis for Branch Distribution of 10 
+Running Global to Shared on array params: []
+brdis:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ brdis ( int N,  int M,  int val) {
+                        
+                            __shared__ otherA[M];
+                            __shared__ otherB[M];
+                            int i;
+                            i = 0;
+                            for (nothing! i < N; i = i + 1) {
+                            
+                                if ((threadIdx.x + i) %% 2 == 0) {
+                                
+                                    int j;
+                                    j = 0;
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        A[j] = val; 
+                                    }
+                                } else {
+                                
+                                    int j;
+                                    j = 0;
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        A[j] = val * 2; 
+                                    } 
+                                } 
+                                int tot;
+                                tot = 0;
+                                int j;
+                                j = 0;
+                                for (nothing! j < M; j = j + 1) {
+                                
+                                    tot = tot + A[j];
+                                    B[j] = tot; 
+                                }
+                                int j;
+                                j = 0;
+                                if ((threadIdx.x + i) %% 2 == 0) {
+                                
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        B[j] = B[j] + val; 
+                                    }
+                                } else {
+                                
+                                    for (nothing! j < M; j = j + 1) {
+                                    
+                                        B[j] = B[j] * B[j]; 
+                                    } 
+                                }  
+                            } 
+                        }
+    
+Best Code generation:
+__global__ brdis ( int N,  int M,  int val) {
+                           
+                               __shared__ otherA[M];
+                               __shared__ otherB[M];
+                               int i;
+                               i = 0;
+                               for (nothing! i < N; i = i + 1) {
+                               
+                                   if ((threadIdx.x + i) %% 2 == 0) {
+                                   
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           A[j] = val; 
+                                       }
+                                       int tot;
+                                       tot = 0;
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           tot = tot + A[j];
+                                           B[j] = tot; 
+                                       }
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           B[j] = B[j] + val; 
+                                       }
+                                   } else {
+                                   
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           A[j] = val * 2; 
+                                       }
+                                       int tot;
+                                       tot = 0;
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           tot = tot + A[j];
+                                           B[j] = tot; 
+                                       }
+                                       int j;
+                                       j = 0;
+                                       for (nothing! j < M; j = j + 1) {
+                                       
+                                           B[j] = B[j] * B[j]; 
+                                       } 
+                                   }  
+                               } 
+                           }
+    
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: []
+
+    9 + tick_z + 64 max(0, _reg_0)
+Program Statistics:
+    Total runtime: 366.965s
