@@ -68,6 +68,19 @@ and cuda_of_statement da (f, l) stmt =
      let (ss, _) = cuda_of_expression (f, l) e in
      ss
   | C.BLOCK b -> snd (cuda_of_block da (f, l) b)
+  | C.SEQUENCE (C.DEFINITION d, C.FOR (e1, e2, e3, s)) ->
+     (match List.rev (cuda_of_definition da (f, l) d) with
+      | (CAssign (CVar id, e, false))::t ->
+         let (is1, e1) = cuda_of_expression (f, l) e1 in
+         let (is2, lg) = logic_of_expr da (f, l) e2 in
+         let (is3, e3) = cuda_of_expression (f, l) e3 in
+         t @
+           [CFor (CAssign (CVar id, e, false)::(is1 @ is2), lg, is3,
+                  add_to_block (cuda_of_stmt_or_block da (f, l) s) is2)]
+      | _ ->
+         (cuda_of_definition da (f, l) d) @
+           (cuda_of_statement (f, l) (C.FOR (e1, e2, e3, s)))
+     )
   | C.SEQUENCE (s1, s2) ->
      (cuda_of_statement (f, l) s1) @ (cuda_of_statement (f, l) s2)
   | C.IF (e, s1, s2) ->
@@ -664,7 +677,7 @@ let print_for_ending fmt i =
                            print_cblock s
       | CFor (s1, l, s2, s) -> fprintf fmt
                                "@[<v>@[<h>for (%a@ %a;@ %a)@ {@]@,%a @ }@]"
-                                 print_for_decl s1
+                                 print_instr_list s1
                                  print_clogic l
                                  print_for_ending (List.hd s2)
                                  print_cblock s
