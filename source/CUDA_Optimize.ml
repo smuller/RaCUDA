@@ -478,7 +478,7 @@ and get_complexity_scores_l (block: 'a cinstr list) : int =
 and get_complexity_scores ((_, block) : 'a cblock) : int =
   get_complexity_scores_l block
 
-(** Return type is (Common, lst1 prev, lst1 after, lst2 prev, lst2 after) *)
+(** Return type is (Common, lst1 prev, lst1 after, lst2 prev, lst2 after) as well as the max_complexity*)
 let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock) 
       (complexity_cutoff: int) fmt =
   let arr1 = Array.of_list lst1 and arr2 = Array.of_list lst2 in
@@ -508,7 +508,7 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
         done
       done;
   let () = if should_log "debug" then Format.fprintf fmt "Maximum complexity is %d \n" !max_complexity in
- !lcs
+ (!lcs, !max_complexity)
 
 (* This is really inefficient, we should fix it *)
 let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
@@ -523,8 +523,9 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
    (
      match code with 
      | CIf (logic, block1, block2) -> 
+       let (common_code, _) = longest_common_codeblock block1 block2 c fmt in
        (
-         match longest_common_codeblock block1 block2 c fmt with
+         match common_code with
          | (None, None, None, None, None) ->
             [CIf (logic, bd_bb block1,
                   bd_bb block2)]
@@ -560,6 +561,27 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
 
 type bound = unit expr
 type ablock = (bound * bound) option ref cblock
+
+
+let get_max_bd_code_complexity block fmt = 
+  let rec helper code_block complexity = 
+    match code_block with
+    | [] -> complexity
+    | code :: rest -> 
+      (
+        match code with 
+          | CIf (logic, (a1, block1), (a2, block2)) -> (
+            let (_, score) = longest_common_codeblock (a1, block1) (a2, block2) 0 fmt in
+            (* let _ = (if score > 0 then Format.fprintf fmt "GOtta complex of : [%d]\n" score else ()) in *)
+            max (max (max (helper block1 complexity) (helper block2 complexity)) (max score complexity)) (helper rest complexity)
+          )
+          | CWhile (_, (_,block)) -> max (helper block complexity) (helper rest complexity)
+          | CFor (_, _, _, (_, block)) -> max (helper block complexity) (helper rest complexity)
+          |  _ -> helper rest complexity
+        
+      )
+  in helper block 0 
+
 
 
 let rec find_array_ids vctx p m ((annot, block): ablock)  = 
@@ -925,7 +947,10 @@ let branch_distribution_mult (prog: 'a cprog) fmt =
 
   (* ASSUMPTION THAT THERE IS ONLY ONE FUNCTION IN A FILE! (or that the arguments in each function are the same) *)
 
-  let (_, _, params, _, _) = List.hd funcs in
+  let (_, _, params, (_, code), _) = List.hd funcs in
+  let complexity_score = get_max_bd_code_complexity code fmt in
+
+  let () = Format.fprintf fmt "\n MAX COMPLEXITY IS %d \n" complexity_score in
 
   let array_params = List.filter is_param_bt_array params in
   let used_array_param_combinations = List.flatten (List.map (fun n -> combnk (n-1) array_params) (List.init (List.length array_params+1) (fun x -> x + 1))) in
