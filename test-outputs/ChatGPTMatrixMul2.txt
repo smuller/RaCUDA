@@ -1,0 +1,179 @@
+
+matrixMultiplication:
+    Bound: 63 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+
+ MAX COMPLEXITY IS 0 
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: [A]
+
+Not running branch distribution 
+Running Global to Shared on array params: [B]
+
+Not running branch distribution 
+Running Global to Shared on array params: [C]
+
+Not running branch distribution 
+Running Global to Shared on array params: [A,B]
+
+Not running branch distribution 
+Running Global to Shared on array params: [A,C]
+
+Not running branch distribution 
+Running Global to Shared on array params: [B,C]
+
+Not running branch distribution 
+Running Global to Shared on array params: [A,B,C]
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+matrixMultiplication:
+    Bound: 63 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A]
+matrixMultiplication:
+    Bound: 152 + 93 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [B]
+matrixMultiplication:
+    Bound: 132 + 47 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [C]
+matrixMultiplication:
+    Bound: 151 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A,B]
+matrixMultiplication:
+    Bound: 221 + 71 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A,C]
+matrixMultiplication:
+    Bound: 240 + 93 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [B,C]
+matrixMultiplication:
+    Bound: 220 + 47 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A,B,C]
+matrixMultiplication:
+    Bound: 309 + 71 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+
+Best Code generation:
+__global__ matrixMultiplication ( float *A,  float *B,  float *C,  int m,  int n,  int k) {
+                       
+                           signed long int lower_bound_B1;
+                           lower_bound_B1 = threadIdx.x
+                                            + (blockIdx.x * blockDim.x);
+                           __shared__ float B1[blockDim.x];
+                           B1[(blockIdx.x * blockDim.x) + threadIdx.x] = B[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_B1];
+                           signed long int lower_bound_C1;
+                           lower_bound_C1 = (k * threadIdy.y)
+                                            + (threadIdx.x
+                                               + ((k
+                                                   * (blockIdy.y * blockDim.y))
+                                                  + (blockIdx.x * blockDim.x)));
+                           __shared__ float C1[blockDim.x];
+                           C1[(blockIdx.x * blockDim.x) + threadIdx.x] = C[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_C1];
+                           int row;
+                           row = (blockIdx.y * blockDim.y) + threadIdx.y;
+                           int col;
+                           col = (blockIdx.x * blockDim.x) + threadIdx.x;
+                           float Cvalue;
+                           Cvalue = 0.;
+                           int i;
+                           for (i = 0; i < n; i = i + 1) {
+                           
+                               if (row < m && i < n && col < k) {
+                               
+                                   Cvalue = Cvalue
+                                            + (A[(row * n) + i]
+                                               * B1
+                                                 [((i * k) + col)
+                                                  - lower_bound_B1]);
+                               } else {
+                               
+                                    
+                               }  
+                           }
+                           if (row < m && col < k) {
+                           
+                               C1[((row * k) + col) - lower_bound_C1] = Cvalue;
+                           } else {
+                           
+                                
+                           } 
+                           B1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_B1] = B[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x];
+                           C1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_C1] = C[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x]; 
+                       }
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [B,C]
+
+220 + tick_z
+Program Statistics:
+    Total runtime: 3.435s

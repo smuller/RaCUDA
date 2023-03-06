@@ -1,0 +1,434 @@
+
+Phase2:
+    Bound: 27491
+    Number of LP variables: 2635
+    Number of LP constraints: 2111
+    Maximum focus functions in use: 81
+    LP solver time: 0.009s
+    
+
+ MAX COMPLEXITY IS 0 
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: [dist]
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+Phase2:
+    Bound: 27491
+    Number of LP variables: 2635
+    Number of LP constraints: 2111
+    Maximum focus functions in use: 81
+    LP solver time: 0.008s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [dist]
+Phase2:
+    Bound: 28705
+    Number of LP variables: 2635
+    Number of LP constraints: 2111
+    Maximum focus functions in use: 81
+    LP solver time: 0.012s
+    
+
+Best Code generation:
+__global__ Phase2 ( int *dist,  int Round,  int n) {
+                       
+                           signed long int lower_bound_dist1;
+                           lower_bound_dist1 = (n * 32)
+                                               + (((n * Round) * 64)
+                                                  + ((n * threadIdy.y)
+                                                     + (threadIdx.x
+                                                        + ((blockIdx.x * 64)
+                                                           + 32))));
+                           __shared__ int dist1[blockDim.x];
+                           dist1[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist1];
+                           signed long int lower_bound_dist2;
+                           lower_bound_dist2 = ((n * Round) * 64)
+                                               + ((n * threadIdy.y)
+                                                  + (threadIdx.x
+                                                     + ((blockIdx.x * 64)
+                                                        + 32)));
+                           __shared__ int dist2[blockDim.x];
+                           dist2[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist2];
+                           signed long int lower_bound_dist3;
+                           lower_bound_dist3 = (n * 32)
+                                               + (((n * Round) * 64)
+                                                  + ((n * threadIdy.y)
+                                                     + (threadIdx.x
+                                                        + (blockIdx.x * 64))));
+                           __shared__ int dist3[blockDim.x];
+                           dist3[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist3];
+                           signed long int lower_bound_dist4;
+                           lower_bound_dist4 = ((n * Round) * 64)
+                                               + ((n * threadIdy.y)
+                                                  + (threadIdx.x
+                                                     + (blockIdx.x * 64)));
+                           __shared__ int dist4[blockDim.x];
+                           dist4[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist4];
+                           signed long int lower_bound_dist5;
+                           lower_bound_dist5 = (n * 32)
+                                               + ((Round * 64)
+                                                  + ((n * threadIdy.y)
+                                                     + (threadIdx.x
+                                                        + (((n * blockIdx.x)
+                                                            * 64)
+                                                           + 32))));
+                           __shared__ int dist5[blockDim.x];
+                           dist5[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist5];
+                           signed long int lower_bound_dist6;
+                           lower_bound_dist6 = (Round * 64)
+                                               + ((n * threadIdy.y)
+                                                  + (threadIdx.x
+                                                     + (((n * blockIdx.x)
+                                                         * 64)
+                                                        + 32)));
+                           __shared__ int dist6[blockDim.x];
+                           dist6[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist6];
+                           signed long int lower_bound_dist7;
+                           lower_bound_dist7 = (n * 32)
+                                               + ((Round * 64)
+                                                  + ((n * threadIdy.y)
+                                                     + (threadIdx.x
+                                                        + ((n * blockIdx.x)
+                                                           * 64))));
+                           __shared__ int dist7[blockDim.x];
+                           dist7[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist7];
+                           signed long int lower_bound_dist8;
+                           lower_bound_dist8 = (Round * 64)
+                                               + ((n * threadIdy.y)
+                                                  + (threadIdx.x
+                                                     + ((n * blockIdx.x) * 64)));
+                           __shared__ int dist8[blockDim.x];
+                           dist8[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist8];
+                           signed long int lower_bound_dist9;
+                           lower_bound_dist9 = (n * 32)
+                                               + (((n * Round) * 64)
+                                                  + ((Round * 64)
+                                                     + ((n * threadIdy.y)
+                                                        + (threadIdx.x + 32))));
+                           __shared__ int dist9[blockDim.x];
+                           dist9[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist9];
+                           signed long int lower_bound_dist10;
+                           lower_bound_dist10 = ((n * Round) * 64)
+                                                + ((Round * 64)
+                                                   + ((n * threadIdy.y)
+                                                      + (threadIdx.x + 32)));
+                           __shared__ int dist10[blockDim.x];
+                           dist10[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist10];
+                           signed long int lower_bound_dist11;
+                           lower_bound_dist11 = (n * 32)
+                                                + (((n * Round) * 64)
+                                                   + ((Round * 64)
+                                                      + ((n * threadIdy.y)
+                                                         + threadIdx.x)));
+                           __shared__ int dist11[blockDim.x];
+                           dist11[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist11];
+                           signed long int lower_bound_dist12;
+                           lower_bound_dist12 = ((n * Round) * 64)
+                                                + ((Round * 64)
+                                                   + ((n * threadIdy.y)
+                                                      + threadIdx.x));
+                           __shared__ int dist12[blockDim.x];
+                           dist12[(blockIdx.x * blockDim.x) + threadIdx.x] = dist[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_dist12];
+                           __shared__ other[64]both[64];
+                           __shared__ other[64]row_blocks[64];
+                           __shared__ other[64]col_blocks[64];
+                           const int i;
+                           i = threadIdx.y;
+                           const int j;
+                           j = threadIdx.x;
+                           const int offset;
+                           offset = 64 * Round;
+                           const int block_i;
+                           block_i = blockIdx.x;
+                           row_blocks[i][j] = dist8[(((((block_i * 64) * n)
+                                                       + offset)
+                                                      + (i * n))
+                                                     + j)
+                                                    - lower_bound_dist8];
+                           row_blocks[i + 32][j] = dist7[(((((block_i * 64)
+                                                             * n)
+                                                            + offset)
+                                                           + ((i + 32) * n))
+                                                          + j)
+                                                         - lower_bound_dist7];
+                           row_blocks[i][j + 32] = dist6[((((((block_i * 64)
+                                                              * n)
+                                                             + offset)
+                                                            + (i * n))
+                                                           + j)
+                                                          + 32)
+                                                         - lower_bound_dist6];
+                           row_blocks[i + 32][j + 32] = dist5[((((((block_i
+                                                                    * 
+                                                                    64)
+                                                                   * 
+                                                                   n)
+                                                                  + offset)
+                                                                 + ((i + 32)
+                                                                    * 
+                                                                    n))
+                                                                + j)
+                                                               + 32)
+                                                              - lower_bound_dist5];
+                           col_blocks[i][j] = dist4[((((offset * n)
+                                                       + (block_i * 64))
+                                                      + (i * n))
+                                                     + j)
+                                                    - lower_bound_dist4];
+                           col_blocks[i + 32][j] = dist3[((((offset * n)
+                                                            + (block_i * 64))
+                                                           + ((i + 32) * n))
+                                                          + j)
+                                                         - lower_bound_dist3];
+                           col_blocks[i][j + 32] = dist2[(((((offset * n)
+                                                             + (block_i * 64))
+                                                            + (i * n))
+                                                           + j)
+                                                          + 32)
+                                                         - lower_bound_dist2];
+                           col_blocks[i + 32][j + 32] = dist1[(((((offset * n)
+                                                                  + (
+                                                                    block_i
+                                                                    * 
+                                                                    64))
+                                                                 + ((i + 32)
+                                                                    * 
+                                                                    n))
+                                                                + j)
+                                                               + 32)
+                                                              - lower_bound_dist1];
+                           both[i][j] = dist12[(((offset * (n + 1)) + (i * n))
+                                                + j)
+                                               - lower_bound_dist12];
+                           both[i + 32][j] = dist11[(((offset * (n + 1))
+                                                      + ((i + 32) * n))
+                                                     + j)
+                                                    - lower_bound_dist11];
+                           both[i][j + 32] = dist10[((((offset * (n + 1))
+                                                       + (i * n))
+                                                      + j)
+                                                     + 32)
+                                                    - lower_bound_dist10];
+                           both[i + 32][j + 32] = dist9[((((offset * (n + 1))
+                                                           + ((i + 32) * n))
+                                                          + j)
+                                                         + 32)
+                                                        - lower_bound_dist9];
+                           __syncthreads()
+                           int k;
+                           for (k = 0; k < 64; k = k + 1) {
+                           
+                               row_blocks[i][j] = min(row_blocks[i][j],
+                                                  row_blocks[i][k]
+                                                  + both[k][j]);
+                               row_blocks[i + 32][j] = min(row_blocks[
+                                                       i + 32][j],
+                                                       row_blocks[i + 32][k]
+                                                       + both[k][j]);
+                               row_blocks[i][j + 32] = min(row_blocks[i]
+                                                       [j + 32],
+                                                       row_blocks[i][k]
+                                                       + both[k][j + 32]);
+                               row_blocks[i + 32][j + 32] = min(row_blocks
+                                                            [i + 32][
+                                                            j + 32],
+                                                            row_blocks
+                                                            [i + 32][k]
+                                                            + both[k][j + 32]);
+                               col_blocks[i][j] = min(col_blocks[i][j],
+                                                  both[i][k]
+                                                  + col_blocks[k][j]);
+                               col_blocks[i + 32][j] = min(col_blocks[
+                                                       i + 32][j],
+                                                       both[i + 32][k]
+                                                       + col_blocks[k][j]);
+                               col_blocks[i][j + 32] = min(col_blocks[i]
+                                                       [j + 32],
+                                                       both[i][k]
+                                                       + col_blocks[k]
+                                                         [j + 32]);
+                               col_blocks[i + 32][j + 32] = min(col_blocks
+                                                            [i + 32][
+                                                            j + 32],
+                                                            both[i + 32][k]
+                                                            + col_blocks[k]
+                                                              [j + 32]); 
+                           }
+                           dist8[(((((block_i * 64) * n) + offset) + (i * n))
+                                  + j)
+                                 - lower_bound_dist8] = row_blocks[i][j];
+                           dist7[(((((block_i * 64) * n) + offset)
+                                   + ((i + 32) * n))
+                                  + j)
+                                 - lower_bound_dist7] = row_blocks[i + 32][j];
+                           dist6[((((((block_i * 64) * n) + offset) + (i * n))
+                                   + j)
+                                  + 32)
+                                 - lower_bound_dist6] = row_blocks[i][j + 32];
+                           dist5[((((((block_i * 64) * n) + offset)
+                                    + ((i + 32) * n))
+                                   + j)
+                                  + 32)
+                                 - lower_bound_dist5] = row_blocks[i + 32][j
+                                                                    + 32];
+                           dist4[((((offset * n) + (block_i * 64)) + (i * n))
+                                  + j)
+                                 - lower_bound_dist4] = col_blocks[i][j];
+                           dist3[((((offset * n) + (block_i * 64))
+                                   + ((i + 32) * n))
+                                  + j)
+                                 - lower_bound_dist3] = col_blocks[i + 32][j];
+                           dist2[(((((offset * n) + (block_i * 64)) + (i * n))
+                                   + j)
+                                  + 32)
+                                 - lower_bound_dist2] = col_blocks[i][j + 32];
+                           dist1[(((((offset * n) + (block_i * 64))
+                                    + ((i + 32) * n))
+                                   + j)
+                                  + 32)
+                                 - lower_bound_dist1] = col_blocks[i + 32][j
+                                                                    + 32];
+                           dist1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist1] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist2[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist2] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist3[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist3] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist4[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist4] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist5[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist5] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist6[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist6] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist7[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist7] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist8[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist8] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist9[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_dist9] = dist[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           dist10[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                  + lower_bound_dist10] = dist[(blockIdx.x
+                                                                * blockDim.x)
+                                                               + threadIdx.x];
+                           dist11[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                  + lower_bound_dist11] = dist[(blockIdx.x
+                                                                * blockDim.x)
+                                                               + threadIdx.x];
+                           dist12[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                  + lower_bound_dist12] = dist[(blockIdx.x
+                                                                * blockDim.x)
+                                                               + threadIdx.x]; 
+                       }
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [dist]
+
+28705
+Program Statistics:
+    Total runtime: 16.619s

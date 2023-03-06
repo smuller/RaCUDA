@@ -1,0 +1,191 @@
+
+sumMatrixOnGPU1D:
+    Bound: 18 + 94 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.004s
+    
+
+ MAX COMPLEXITY IS 0 
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatA]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatB]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatC]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatA,MatB]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatA,MatC]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatB,MatC]
+
+Not running branch distribution 
+Running Global to Shared on array params: [MatA,MatB,MatC]
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+sumMatrixOnGPU1D:
+    Bound: 18 + 94 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatA]
+sumMatrixOnGPU1D:
+    Bound: 87 + 72 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatB]
+sumMatrixOnGPU1D:
+    Bound: 87 + 72 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatC]
+sumMatrixOnGPU1D:
+    Bound: 87 + 72 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatA,MatB]
+sumMatrixOnGPU1D:
+    Bound: 156 + 50 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatA,MatC]
+sumMatrixOnGPU1D:
+    Bound: 156 + 50 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatB,MatC]
+sumMatrixOnGPU1D:
+    Bound: 156 + 50 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [MatA,MatB,MatC]
+sumMatrixOnGPU1D:
+    Bound: 225 + 28 max(0, ny)
+    Number of LP variables: 939
+    Number of LP constraints: 830
+    Maximum focus functions in use: 38
+    LP solver time: 0.003s
+    
+
+Best Code generation:
+__global__ sumMatrixOnGPU1D ( float *MatA,  float *MatB,  float *MatC,  int nx,  int ny) {
+                       
+                           signed long int lower_bound_MatA1;
+                           lower_bound_MatA1 = threadIdx.x
+                                               + (blockIdx.x * blockDim.x);
+                           __shared__ float MatA1[blockDim.x];
+                           MatA1[(blockIdx.x * blockDim.x) + threadIdx.x] = MatA[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_MatA1];
+                           signed long int lower_bound_MatB1;
+                           lower_bound_MatB1 = threadIdx.x
+                                               + (blockIdx.x * blockDim.x);
+                           __shared__ float MatB1[blockDim.x];
+                           MatB1[(blockIdx.x * blockDim.x) + threadIdx.x] = MatB[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_MatB1];
+                           signed long int lower_bound_MatC1;
+                           lower_bound_MatC1 = threadIdx.x
+                                               + (blockIdx.x * blockDim.x);
+                           __shared__ float MatC1[blockDim.x];
+                           MatC1[(blockIdx.x * blockDim.x) + threadIdx.x] = MatC[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_MatC1];
+                           unsigned int ix;
+                           ix = threadIdx.x + (blockIdx.x * blockDim.x);
+                           if (ix < nx) {
+                           
+                               int iy;
+                               for (iy = 0; iy < ny; iy = iy + 1) {
+                               
+                                   int idx;
+                                   idx = (iy * nx) + ix;
+                                   MatC1[idx - lower_bound_MatC1] = MatA1
+                                                                    [
+                                                                    idx
+                                                                    - 
+                                                                    lower_bound_MatA1]
+                                                                    + 
+                                                                    MatB1
+                                                                    [
+                                                                    idx
+                                                                    - 
+                                                                    lower_bound_MatB1]; 
+                               }
+                           } else {
+                           
+                                
+                           } 
+                           MatA1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_MatA1] = MatA[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           MatB1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_MatB1] = MatB[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x];
+                           MatC1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_MatC1] = MatC[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x]; 
+                       }
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [MatA,MatB,MatC]
+
+225 + tick_z
+Program Statistics:
+    Total runtime: 1.378s

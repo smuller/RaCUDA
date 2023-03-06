@@ -1,0 +1,404 @@
+
+dotKernel:
+    Sorry, I could not find a bound
+    
+ MAX COMPLEXITY IS 0 
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_a]
+d_a is missing bounds 
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_b]
+d_b is missing bounds 
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_c]
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_a,d_b]
+d_a is missing bounds 
+d_b is missing bounds 
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_a,d_c]
+d_a is missing bounds 
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_b,d_c]
+d_b is missing bounds 
+
+Not running branch distribution 
+Running Global to Shared on array params: [d_a,d_b,d_c]
+d_a is missing bounds 
+d_b is missing bounds 
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_a]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_b]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_c]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_a,d_b]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_a,d_c]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_b,d_c]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  
+                        }
+    Analysis for No Branch Distribution
+Running Global to Shared on array params: [d_a,d_b,d_c]
+dotKernel:
+    Sorry, I could not find a bound
+    
+FAILED TO ANALYZE:
+__global__ dotKernel ( float *d_a,  float *d_b,  float *d_c) {
+                        
+                            __shared__ othercache[32];
+                            int tid;
+                            tid = threadIdx.x + (blockIdx.x * blockDim.x);
+                            int cacheIndex;
+                            cacheIndex = threadIdx.x;
+                            float temp;
+                            temp = 0;
+                            while (tid < N) {
+                            
+                                temp = temp + (d_a[tid] * d_b[tid]);
+                                tid = tid + (blockDim.x * gridDim.x); 
+                            }
+                            cache[cacheIndex] = temp;
+                            __syncthreads()
+                            int i;
+                            i = blockDim.x / 2;
+                            while (i > 0) {
+                            
+                                __syncthreads()
+                                if (cacheIndex < i) {
+                                
+                                    cache[cacheIndex] = cache[cacheIndex]
+                                                        + cache
+                                                          [cacheIndex + i];
+                                } else {
+                                
+                                     
+                                } 
+                                i = i / 2; 
+                            }
+                            if (cacheIndex == 0) {
+                            
+                                
+                            } else {
+                            
+                                 
+                            }  

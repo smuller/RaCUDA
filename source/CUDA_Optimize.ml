@@ -958,7 +958,12 @@ let branch_distribution_mult (prog: 'a cprog) fmt =
   let bdp c used_array_params = branch_distribution_prog c prog used_array_params fmt in
 
   (* bdp_params produces a list of (branch_distribution_cutoff, used_array_params, code) *)
-  let bdp_params used_array_params = [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params); (10, used_array_params, bdp 10 used_array_params)] in
+  let bdp_params used_array_params = 
+    if complexity_score > 10 then
+      [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params); (10, used_array_params, bdp 10 used_array_params)]
+    else if complexity_score > 0 then
+      [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params)] 
+    else [(~-1, used_array_params, bdp ~-1 used_array_params)] in
   
   List.flatten (List.map bdp_params used_array_param_combinations)
   
