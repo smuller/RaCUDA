@@ -1,0 +1,186 @@
+
+adjustIncrement:
+    Bound: 337
+    Number of LP variables: 347
+    Number of LP constraints: 373
+    Maximum focus functions in use: 23
+    LP solver time: 0.002s
+    
+
+ MAX COMPLEXITY IS 1 
+
+Running Branch Distribution with cutoff of 0 
+Running Global to Shared on array params: []
+
+Not running branch distribution 
+Running Global to Shared on array params: []
+
+Running Branch Distribution with cutoff of 0 
+Running Global to Shared on array params: [d]
+
+Not running branch distribution 
+Running Global to Shared on array params: [d]
+
+Running Branch Distribution with cutoff of 0 
+Running Global to Shared on array params: [incr]
+
+Not running branch distribution 
+Running Global to Shared on array params: [incr]
+
+Running Branch Distribution with cutoff of 0 
+Running Global to Shared on array params: [d,incr]
+
+Not running branch distribution 
+Running Global to Shared on array params: [d,incr]
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+adjustIncrement:
+    Bound: 337
+    Number of LP variables: 347
+    Number of LP constraints: 373
+    Maximum focus functions in use: 23
+    LP solver time: 0.002s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: []
+adjustIncrement:
+    Bound: 229
+    Number of LP variables: 167
+    Number of LP constraints: 187
+    Maximum focus functions in use: 11
+    LP solver time: 0.001s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [d]
+adjustIncrement:
+    Bound: 275
+    Number of LP variables: 107
+    Number of LP constraints: 125
+    Maximum focus functions in use: 7
+    LP solver time: 0.001s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [d]
+adjustIncrement:
+    Bound: 251
+    Number of LP variables: 107
+    Number of LP constraints: 125
+    Maximum focus functions in use: 7
+    LP solver time: 0.001s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [incr]
+adjustIncrement:
+    Bound: 366
+    Number of LP variables: 347
+    Number of LP constraints: 373
+    Maximum focus functions in use: 23
+    LP solver time: 0.001s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [incr]
+adjustIncrement:
+    Bound: 265
+    Number of LP variables: 167
+    Number of LP constraints: 187
+    Maximum focus functions in use: 11
+    LP solver time: 0.001s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [d,incr]
+adjustIncrement:
+    Bound: 304
+    Number of LP variables: 107
+    Number of LP constraints: 125
+    Maximum focus functions in use: 7
+    LP solver time: 0.001s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [d,incr]
+adjustIncrement:
+    Bound: 287
+    Number of LP variables: 107
+    Number of LP constraints: 125
+    Maximum focus functions in use: 7
+    LP solver time: 0.001s
+    
+
+Best Code generation:
+__global__ adjustIncrement ( unsigned int *d,  unsigned int *incr,  int input_size) {
+                       
+                           signed long int lower_bound_d1;
+                           lower_bound_d1 = (threadIdx.x * 2)
+                                            + ((blockIdx.x * blockDim.x) * 2);
+                           __shared__ unsigned int d1[blockDim.x];
+                           d1[(blockIdx.x * blockDim.x) + threadIdx.x] = d[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_d1];
+                           signed long int lower_bound_d2;
+                           lower_bound_d2 = (threadIdx.x * 2)
+                                            + (((blockIdx.x * blockDim.x) * 2)
+                                               + 1);
+                           __shared__ unsigned int d2[blockDim.x];
+                           d2[(blockIdx.x * blockDim.x) + threadIdx.x] = d[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_d2];
+                           signed long int lower_bound_incr1;
+                           lower_bound_incr1 = blockIdx.x;
+                           __shared__ unsigned int incr1[blockDim.x];
+                           incr1[(blockIdx.x * blockDim.x) + threadIdx.x] = incr[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_incr1];
+                           int pos;
+                           pos = (((blockIdx.x * blockDim.x) * 2)
+                                  + (threadIdx.x * 2))
+                                 + 1;
+                           if (pos < input_size) {
+                           
+                               d2[pos - lower_bound_d2] = d2
+                                                          [pos
+                                                           - lower_bound_d2]
+                                                          + incr1
+                                                            [blockIdx.x
+                                                             - lower_bound_incr1];
+                           } else {
+                           
+                                
+                           } 
+                           d1[(pos - 1) - lower_bound_d1] = d1
+                                                            [(pos - 1)
+                                                             - lower_bound_d1]
+                                                            + incr1
+                                                              [blockIdx.x
+                                                               - lower_bound_incr1];
+                           d1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_d1] = d[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x];
+                           d2[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_d2] = d[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x];
+                           incr1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                                 + lower_bound_incr1] = incr[(blockIdx.x
+                                                              * blockDim.x)
+                                                             + threadIdx.x]; 
+                       }
+
+Optimal Branch Distribution cutoff: 0
+Optimal Params to move to shared: [d,incr]
+
+287
+Program Statistics:
+    Total runtime: 0.515s
