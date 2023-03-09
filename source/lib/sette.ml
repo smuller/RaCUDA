@@ -11,6 +11,8 @@
 (*                                                                     *)
 (***********************************************************************)
 
+let p_compare = compare
+
 (** Sets over ordered types *)
 
 (**  Modified by B. Jeannet to get a generic type and a few additions
@@ -323,17 +325,17 @@ module Compare = struct
 
 end
 
-let add x set = Compare.add Pervasives.compare x set
-let mem x set = Compare.mem Pervasives.compare x set
-let remove x set = Compare.remove Pervasives.compare x set
-let union s1 s2 = Compare.union Pervasives.compare s1 s2
-let inter s1 s2 = Compare.inter Pervasives.compare s1 s2
-let diff s1 s2 = Compare.diff Pervasives.compare s1 s2
-let compare s1 s2 = Compare.compare Pervasives.compare s1 s2
-let equal s1 s2 = Compare.equal Pervasives.compare s1 s2
-let subset s1 s2 = Compare.subset Pervasives.compare s1 s2
-let filter f s = Compare.filter Pervasives.compare f s
-let partition f s = Compare.partition Pervasives.compare f s
+let add x set = Compare.add p_compare x set
+let mem x set = Compare.mem p_compare x set
+let remove x set = Compare.remove p_compare x set
+let union s1 s2 = Compare.union p_compare s1 s2
+let inter s1 s2 = Compare.inter p_compare s1 s2
+let diff s1 s2 = Compare.diff p_compare s1 s2
+let compare s1 s2 = Compare.compare p_compare s1 s2
+let equal s1 s2 = Compare.equal p_compare s1 s2
+let subset s1 s2 = Compare.subset p_compare s1 s2
+let filter f s = Compare.filter p_compare f s
+let partition f s = Compare.partition p_compare f s
 
 (** Output signature of the functor {!Sette.Make}. *)
 module type S =

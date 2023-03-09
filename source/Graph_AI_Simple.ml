@@ -7,6 +7,8 @@
    complex domains.
 *)
 
+let p_abs = abs
+
 open Types
 open Graph_Types
 open Polynom
@@ -460,7 +462,7 @@ let bounds abs pe =
               if k < 0 then (lbs', ubs', -k) else (ubs', lbs', +k)
             in
             let addscale l (k', l') =
-              let vk = Pervasives.abs (L.coeff v l) in
+              let vk = p_abs (L.coeff v l) in
               let l = L.mult k l in
               let lcm = Presburger.lcm vk k' in
               let l = L.plus (lcm/vk) l (L.mult (lcm/k') l') in
