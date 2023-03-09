@@ -106,10 +106,10 @@ expr_:
   | TLPAR expr TRPAR                                                          {  (desc $2) }
 
 expr:
-  | expr_  {mk () $1 }
+  | expr_  {mk (ref None) $1 }
 
 exprr:
-  | TRANDOM { mk () ERandom }
+  | TRANDOM { mk (ref None) ERandom }
   | expr    { $1 }
 
 prob_expr:

@@ -1,5 +1,7 @@
 (* Van Chan Ngo - 2017 *)
 
+type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
+
 type csjump =
   | JJmp of int list                                            (* list of successor blocks *)
   | JRetVar of Types.id list                                    (* return variable for unvoid function *)

@@ -453,7 +453,7 @@
           | (None, _) -> let () = Format.fprintf fmt "\nFAILED TO ANALYZE:\n" in let _ = CUDA.print_cprog fmt cuda_code in best
           | (Some (annot, p), None) -> Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
           | (Some (_, p), Some (best_cutoff,best_params,best_poly, best_prog)) ->
-             if Polynom.Poly.always_less p best_poly then
+             if Polynom.Poly.heuristic_less p best_poly then
                Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
              else
                best

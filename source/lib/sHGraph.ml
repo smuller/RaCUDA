@@ -5,6 +5,8 @@
 (** We implement here oriented hypergraphs. The implementation is
    done by side-effect. *)
 
+let p_compare = compare
+
 open Format
 
 let array_forall f tab =
@@ -62,7 +64,7 @@ let compare_priority (p:'a -> int)
       x = p x and
       y = p y
     in
-    Pervasives.compare y x
+    p_compare y x
 
 let map_priority cmp hedge_dummy = function
   | None -> None
@@ -720,7 +722,7 @@ end
 (* *********************************************************************** *)
 
 let stdcompare =
-  let cmp x y = Pervasives.compare x y in
+  let cmp x y = p_compare x y in
   {
     hashv = Hashhe.stdcompare;
     hashh = Hashhe.stdcompare;

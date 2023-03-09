@@ -36,7 +36,7 @@ end
 module type Poly = sig
   type t and monom
   val zero: unit -> t
-  val always_less: t -> t -> bool
+  val heuristic_less: t -> t -> bool
   val const: float -> t
   val of_monom: monom -> float -> t
   val of_expr: 'a Types.expr -> t
@@ -344,7 +344,7 @@ module MkPoly(Mon: Monom)
   let print_ascii = print true
   let print = print false
 
-  let always_less a b =
+  let heuristic_less a b =
     let find_or_zero k m =
       try M.find k m with Not_found -> 0.0
     in
@@ -355,40 +355,27 @@ module MkPoly(Mon: Monom)
     let float_le a b =
       a -. b < 0.01
     in
+    let coeffs_at_degree deg p =
+      fold (fun m x s -> if Mon.degree m = deg then s +. x else s) p 0.0
+    in
+    let rec compare_at_degrees deg =
+      if deg < 0 then false
+      else
+        let diff = coeffs_at_degree deg a -. coeffs_at_degree deg b in
+        if diff < (-0.01) then true
+        else if diff > 0.01 then false
+        else compare_at_degrees (deg - 1)
+    in
+    let degree_a = degree a in
+    let degree_b = degree b in
     let ans =
-    M.for_all
-      (fun k ca ->
-        if not (float_le ca (find_or_zero k b) || Mon.is_one k) then
-          (Format.fprintf Format.std_formatter "%f > %f\n"
-             ca (find_or_zero k b);
-           false)
-        else true)
-      a
-    &&
-      M.for_all
-        (fun k cb ->
-          if not (float_le (find_or_zero k a) cb || Mon.is_one k) then
-            (Format.fprintf Format.std_formatter "%f > %f\n"
-               (find_or_zero k a) cb;
-             false)
-          else true)
-        b
+      (degree_a < degree_b) ||
+        ((degree_a = degree_b) &&
+           (compare_at_degrees degree_a))
     in
     Format.fprintf Format.std_formatter "%s\n\n"
       (if ans then "Yes" else "No");
     ans
-    (*
-    let binds_a = M.bindings a in
-    let binds_b = M.bindings b in
-    let f r (ka, ca) (kb, cb) =
-      r && ka = kb && ca < cb
-    in
-    
-      try
-        List.fold_left2 f true binds_a binds_b
-      with Invalid_argument _ -> false
-    in
-     *)
 
   let zero () = zero
 
