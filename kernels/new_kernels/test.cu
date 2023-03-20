@@ -1,44 +1,26 @@
-__global__ void cdf(unsigned int *in, float *out, int size1, int size2){
-  //loading
-  __shared__ float blockSum[HISTOGRAM_LENGTH];
-  unsigned int tx = threadIdx.x;
-  unsigned int start = 2 * blockIdx.x * blockDim.x;
-  if (start + 2*tx < size1)
-    blockSum[2*tx] = in[start + 2*tx]/((float) size2);
-  else
-    blockSum[2*tx] = 0.;
-    
-  if (start + 2*tx + 1< size1)
-    blockSum[2*tx + 1] = in[start + 2*tx + 1]/((float) size2);
-  else
-    blockSum[2*tx + 1] = 0.;  
-  
-  //reduction
-  int stride = 1;
-  while (stride < 2*blockDim.x){
-  __syncthreads();
-  int index = (tx + 1)*stride*2 - 1;
-  if (index < 2*blockDim.x && (index - stride) >= 0){
-    blockSum[index] += blockSum[index - stride];
-  }
-  stride *= 2;
-  }
- //post scan
- stride = blockDim.x / 2;
- while (stride > 0){
-   __syncthreads();
-   int index = (tx + 1)*stride*2 - 1;
-   if (index + stride < 2 * blockDim.x){
-     blockSum[index + stride] += blockSum[index];
-   }
-   stride /= 2;
- }
- __syncthreads();
- //output
- if (start + 2*tx < size1){
-   out[start + 2*tx] = blockSum[2 * tx];
- }
- if (start + 2*tx + 1< size1){
-   out[start + 2*tx + 1] = blockSum[2 * tx + 1];
- }
+__global__ void example_kernel(float *A, float *B, float *C, int n, int m) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < n && col < m) {
+        float sum = 0;
+
+        // Flaw 1: Accessing global memory directly in a loop
+        for (int i = 0; i < m; ++i) {
+            float a = A[row * m + i];
+            float b = B[i * m + col];
+
+            // Flaw 2: Branching based on input values
+            if (a < 0 && b < 0) {
+                sum += a * b * 2;
+            } else if (a >= 0 && b < 0) {
+                sum += a * b * 0.5;
+            } else {
+                sum += a * b;
+            }
+        }
+
+        // Flaw 3: Writing to global memory directly
+        C[row * m + col] = sum;
+    }
 }

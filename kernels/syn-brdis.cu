@@ -2,7 +2,7 @@ __global__ brdis (int N, int M, int val) {
   __shared__ int A[M];
   __shared__ int B[M];
   for (int i = 0; i < N; ++i) {
-    if ((threadIdx.x + i) % 2 == 0) {
+    if ((threadIdx.x + i) == 0) {
       for (int j = 0; j < M; ++j) {
         A[j] = val;
       }

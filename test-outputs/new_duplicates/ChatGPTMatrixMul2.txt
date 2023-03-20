@@ -1,0 +1,137 @@
+
+ MAX COMPLEXITY IS 0 
+
+matrixMultiplication:
+    Bound: 63 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - Greedy best cutoff is -1
+
+matrixMultiplication:
+    Bound: 63 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [B]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [C]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [A] 
+
+matrixMultiplication:
+    Bound: 152 + 93 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [B] 
+
+matrixMultiplication:
+    Bound: 132 + 47 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [C] 
+
+matrixMultiplication:
+    Bound: 151 + 69 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [B] 
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A,B]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [B,C]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [B,A] 
+
+matrixMultiplication:
+    Bound: 221 + 71 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [B,C] 
+
+matrixMultiplication:
+    Bound: 220 + 47 max(0, n)
+    Number of LP variables: 1060
+    Number of LP constraints: 963
+    Maximum focus functions in use: 40
+    LP solver time: 0.004s
+    
+INFO - [OptDriver] - No Greedy improvement, we have found the best set
+Best Code generation:
+
+__global__ matrixMultiplication ( float *A,  float *B,  float *C,  int m,  int n,  int k) {
+
+    signed long int lower_bound_B1;
+    lower_bound_B1 = threadIdx.x + (blockIdx.x * blockDim.x);
+    __shared__ float B1[blockDim.x];
+    B1[(blockIdx.x * blockDim.x) + threadIdx.x] = B[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_B1];
+    int row;
+    row = (blockIdx.y * blockDim.y) + threadIdx.y;
+    int col;
+    col = (blockIdx.x * blockDim.x) + threadIdx.x;
+    float Cvalue;
+    Cvalue = 0.;
+    int i;
+    for (i = 0; i < n; i = i + 1) {
+    
+        if (row < m && i < n && col < k) {
+        
+            Cvalue = Cvalue
+                     + (A[(row * n) + i]
+                        * B1[((i * k) + col) - lower_bound_B1]);
+        } else {
+        
+             
+        }  
+    }
+    if (row < m && col < k) {
+    
+        C[(row * k) + col] = Cvalue;
+    } else {
+    
+         
+    } 
+    B1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_B1] = B[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x]; 
+}
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [B]
+
+132 + tick_z
+Program Statistics:
+    Total runtime: 2.611s
