@@ -428,6 +428,91 @@
          Format.eprintf "%s: cannot open file '%s'@." Sys.argv.(0) !input_file;
          raise Utils.Error
      in
+     let greedy_best_cutoff = 
+      let opts = CUDA_Optimize.greedy_find_branch_distribution_cutoffs prog fmt in
+      let init = 
+        match analyze_cu_prog tick_var p m prog fmt with
+        | Some (_, p) -> Some (~-1, p)
+        | None -> None in
+      let best = List.fold_left (
+        fun best cuda -> 
+          let (branch_distribution_cutoff, _, cuda_code) = cuda in
+          let cuda_code : Graph.annot CUDA_Types.cprog =
+            CUDA_Types.reannot_prog (fun _ -> ref None) cuda_code in
+          match (analyze_cu_prog_no_annots tick_var p m cuda_code fmt, best) with
+          | (None, _) -> let () = Format.fprintf fmt "\nFAILED TO ANALYZE:\n" in let _ = CUDA.print_cprog fmt cuda_code in best
+          | (Some (annot, p), None) -> Some (branch_distribution_cutoff, p)
+          | (Some (_, p), Some (best_cutoff,best_poly)) ->
+             if Polynom.Poly.heuristic_less p best_poly then
+               Some (branch_distribution_cutoff, p)
+             else
+               best
+      )
+      init
+      opts
+      in 
+      match best with 
+        | None -> let _ = Format.fprintf fmt "WARN - [OptDriver] - Failed to get a greedy best branch distribution cutoff!\n" in -1
+        | Some (cutoff, p) -> let _ = Format.fprintf fmt "INFO - [OptDriver] - Greedy best cutoff is %d\n" cutoff in cutoff
+      in
+     
+    let greedy_used_array_params = 
+      let initres =
+        match analyze_cu_prog tick_var p m prog fmt with
+        | Some (_, p) -> Some (~-1, [], p, prog)
+        (*Some (p, (CUDA_Types.reannot_prog (fun _ -> (ref None)) prog)) *)
+        | None -> None
+      in
+      let find_best_single_param prog current = 
+        let opts = match current with
+          | Some (_, current_params, _, _) -> CUDA_Optimize.greedy_find_array_params prog greedy_best_cutoff current_params fmt
+          | None -> failwith "Something went really wrong with find_best_single_param" in
+        
+        let _ = if List.length opts = 0 then
+          Format.fprintf fmt "INFO - [OptDriver] - All possible array params have been moved to shared, terminating Greedy search\n"
+        else
+          Format.fprintf fmt "INFO - [OptDriver] - Checking unused params for greedy improvement\n" in
+          
+        let best =
+          List.fold_left
+            (fun best cuda ->
+              let (branch_distribution_cutoff, used_array_params, cuda_code) = cuda in
+              let cuda_code : Graph.annot CUDA_Types.cprog =
+                CUDA_Types.reannot_prog (fun _ -> ref None) cuda_code in
+              let () = if branch_distribution_cutoff >= 0 then
+                Format.fprintf fmt "INFO - [OptDriver] - Analysis for Branch Distribution of %d \n" branch_distribution_cutoff
+               else Format.fprintf fmt "INFO - [OptDriver] - Analysis for No Branch Distribution\n"in
+    
+               let () = Format.fprintf fmt "INFO - [OptDriver] - Running Global to Shared on array params: [%s] \n" (String.concat "," (List.map (fun (x,_) -> x) used_array_params)) in
+    
+              (* CUDA.print_cprog Format.std_formatter cuda; *)
+              match (analyze_cu_prog_no_annots tick_var p m cuda_code fmt, best) with
+              | (None, _) -> let () = Format.fprintf fmt "\nFAILED TO ANALYZE:\n" in let _ = CUDA.print_cprog fmt cuda_code in best
+              | (Some (annot, p), None) -> Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
+              | (Some (_, p), Some (best_cutoff,best_params,best_poly, best_prog)) ->
+                 if Polynom.Poly.heuristic_less p best_poly then
+                   Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
+                 else
+                   best
+            )
+            current
+            opts
+        in best in
+      let rec find_best_all prog current = 
+        let best_next = find_best_single_param prog current in
+        match (best_next, current) with
+        | (None, _) -> let () = Format.fprintf fmt "WARN - [OptDriver] - Could not find next Greedy choice for Global to Shared! \n" in current
+        | (_, None) -> let () = Format.fprintf fmt "ERROR - [OptDriver] - Current Greedy best choice is set to None! \n" in best_next
+        | (Some (cutoff, new_params, new_poly, new_code), Some(_, _, current_poly, _)) -> 
+            if Polynom.Poly.heuristic_less new_poly current_poly then
+              let () = Format.fprintf fmt "INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [%s] \n" (String.concat "," (List.map (fun (x,_) -> x) new_params)) in
+              find_best_all prog (Some (cutoff, new_params, new_poly, new_code))
+            else
+              let () = Format.fprintf fmt "INFO - [OptDriver] - No Greedy improvement, we have found the best set" in
+              current in
+      find_best_all prog initres in 
+
+(* 
      let initres =
        match analyze_cu_prog tick_var p m prog fmt with
        | Some (_, p) -> Some (~-1, [], p, prog)
@@ -460,8 +545,8 @@
         )
         initres
         opts
-     in
-     match best with
+     in *)
+     match greedy_used_array_params with
      | None -> failwith "not able to analyze"
      | Some (branch_distribution_cutoff,array_params,bound, cuda) ->
  
@@ -472,7 +557,7 @@
         let () = Format.fprintf fmt "Optimal Params to move to shared: [%s]\n" (String.concat "," param_ids) in
         let () = Polynom.Poly.print_ascii fmt bound in
         let () = close_out outc in 0
-   in
+   in 
    (* measure the total runtime *)
    try 
      let retcode = Time.wrap_duration total_runtime main_optimize in

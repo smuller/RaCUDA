@@ -1,0 +1,160 @@
+
+ MAX COMPLEXITY IS 0 
+
+elementWiseAddition:
+    Bound: 7 + 42 max(0, -1 + N) max(0, N) + 57 max(0, N)
+    Number of LP variables: 27282
+    Number of LP constraints: 21477
+    Maximum focus functions in use: 1596
+    LP solver time: 0.190s
+    
+INFO - [OptDriver] - Greedy best cutoff is -1
+
+elementWiseAddition:
+    Bound: 7 + 42 max(0, -1 + N) max(0, N) + 57 max(0, N)
+    Number of LP variables: 27282
+    Number of LP constraints: 21477
+    Maximum focus functions in use: 1596
+    LP solver time: 0.194s
+    
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [a]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [b]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [c]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [a] 
+
+elementWiseAddition:
+    Bound: 57 + 35 N^2 + 15 max(0, N)
+    Number of LP variables: 37884
+    Number of LP constraints: 29104
+    Maximum focus functions in use: 2232
+    LP solver time: 0.378s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [b] 
+
+elementWiseAddition:
+    Bound: 57 + 35 N^2 + 15 max(0, N)
+    Number of LP variables: 37884
+    Number of LP constraints: 29104
+    Maximum focus functions in use: 2232
+    LP solver time: 0.346s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [c] 
+
+elementWiseAddition:
+    Bound: 57 + 35 max(0, -1 + N) max(0, N) + 50 max(0, N)
+    Number of LP variables: 43595
+    Number of LP constraints: 33614
+    Maximum focus functions in use: 2532
+    LP solver time: 0.410s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [a] 
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [a,b]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [a,c]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [a,b] 
+
+elementWiseAddition:
+    Bound: 107 + 28 N^2 + 15 max(0, N)
+    Number of LP variables: 50073
+    Number of LP constraints: 37833
+    Maximum focus functions in use: 2964
+    LP solver time: 0.713s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [a,c] 
+
+elementWiseAddition:
+    Bound: 107 + 28 N^2 + 15 max(0, N)
+    Number of LP variables: 56641
+    Number of LP constraints: 42964
+    Maximum focus functions in use: 3312
+    LP solver time: 0.696s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [a,b] 
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [a,b,c]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [a,b,c] 
+
+elementWiseAddition:
+    Bound: 157 + 21 N^2 + 15 max(0, N)
+    Number of LP variables: 71274
+    Number of LP constraints: 53416
+    Maximum focus functions in use: 4188
+    LP solver time: 1.507s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [a,b,c] 
+INFO - [OptDriver] - All possible array params have been moved to shared, terminating Greedy search
+INFO - [OptDriver] - No Greedy improvement, we have found the best set
+Best Code generation:
+
+__global__ elementWiseAddition ( float *a,  float *b,  float *c,  int N) {
+
+    signed long int lower_bound_a1;
+    lower_bound_a1 = 0;
+    __shared__ float a1[blockDim.x];
+    a1[(blockIdx.x * blockDim.x) + threadIdx.x] = a[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_a1];
+    signed long int lower_bound_b1;
+    lower_bound_b1 = 0;
+    __shared__ float b1[blockDim.x];
+    b1[(blockIdx.x * blockDim.x) + threadIdx.x] = b[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_b1];
+    signed long int lower_bound_c1;
+    lower_bound_c1 = 0;
+    __shared__ float c1[blockDim.x];
+    c1[(blockIdx.x * blockDim.x) + threadIdx.x] = c[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_c1];
+    int i;
+    for (i = 0; i < N; i = i + 1) {
+    
+        int j;
+        for (j = 0; j < N; j = j + 1) {
+        
+            c1[i - lower_bound_c1] = a1[i - lower_bound_a1]
+                                     + b1[i - lower_bound_b1]; 
+        } 
+    }
+    a1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_a1] = a[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x];
+    b1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_b1] = b[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x];
+    c1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_c1] = c[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x]; 
+}
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [a,b,c]
+
+157 + 21 _reg_3^2 + tick_z
+Program Statistics:
+    Total runtime: 109.128s

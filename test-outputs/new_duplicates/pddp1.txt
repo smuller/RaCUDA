@@ -1,0 +1,195 @@
+
+ MAX COMPLEXITY IS 0 
+
+pddp1:
+    Bound: 34 + 50 max(0, m)
+    Number of LP variables: 1268
+    Number of LP constraints: 1135
+    Maximum focus functions in use: 47
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - Greedy best cutoff is -1
+
+pddp1:
+    Bound: 34 + 50 max(0, m)
+    Number of LP variables: 1268
+    Number of LP constraints: 1135
+    Maximum focus functions in use: 47
+    LP solver time: 0.005s
+    
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [objects]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [w]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [x]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [tmp]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [objects] 
+
+pddp1:
+    Bound: 123 + 74 max(0, m)
+    Number of LP variables: 1268
+    Number of LP constraints: 1135
+    Maximum focus functions in use: 47
+    LP solver time: 0.005s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [w] 
+
+pddp1:
+    Bound: 119 + 43 max(0, m)
+    Number of LP variables: 1194
+    Number of LP constraints: 1066
+    Maximum focus functions in use: 45
+    LP solver time: 0.005s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x] 
+
+pddp1:
+    Bound: 84 + 43 max(0, m)
+    Number of LP variables: 1539
+    Number of LP constraints: 1346
+    Maximum focus functions in use: 59
+    LP solver time: 0.007s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [tmp] 
+
+pddp1:
+    Bound: 112 + 50 max(0, m)
+    Number of LP variables: 1194
+    Number of LP constraints: 1066
+    Maximum focus functions in use: 45
+    LP solver time: 0.005s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [x] 
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [objects,x]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [w,x]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [x,tmp]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x,objects] 
+
+pddp1:
+    Bound: 173 + 67 max(0, m)
+    Number of LP variables: 1539
+    Number of LP constraints: 1346
+    Maximum focus functions in use: 59
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x,w] 
+
+pddp1:
+    Bound: 169 + 36 max(0, m)
+    Number of LP variables: 1465
+    Number of LP constraints: 1277
+    Maximum focus functions in use: 57
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x,tmp] 
+
+pddp1:
+    Bound: 162 + 43 max(0, m)
+    Number of LP variables: 1465
+    Number of LP constraints: 1277
+    Maximum focus functions in use: 57
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - Greedy improvement detected, setting Global to Shared to [x,w] 
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [objects,w,x]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [w,x,tmp]
+INFO - [OptDriver] - Checking unused params for greedy improvement
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x,w,objects] 
+
+pddp1:
+    Bound: 258 + 60 max(0, m)
+    Number of LP variables: 1465
+    Number of LP constraints: 1277
+    Maximum focus functions in use: 57
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - Analysis for No Branch Distribution
+INFO - [OptDriver] - Running Global to Shared on array params: [x,w,tmp] 
+
+pddp1:
+    Bound: 247 + 36 max(0, m)
+    Number of LP variables: 1391
+    Number of LP constraints: 1208
+    Maximum focus functions in use: 55
+    LP solver time: 0.006s
+    
+INFO - [OptDriver] - No Greedy improvement, we have found the best set
+Best Code generation:
+
+__global__ pddp1 ( double *objects,  int m,  int n,  double *w,  double *x,  double *tmp) {
+
+    signed long int lower_bound_w1;
+    lower_bound_w1 = threadIdy.y + (blockIdy.y * blockDim.y);
+    __shared__ double w1[blockDim.x];
+    w1[(blockIdx.x * blockDim.x) + threadIdx.x] = w[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_w1];
+    signed long int lower_bound_x1;
+    lower_bound_x1 = 0;
+    __shared__ double x1[blockDim.x];
+    x1[(blockIdx.x * blockDim.x) + threadIdx.x] = x[((blockIdx.x * blockDim.x)
+                                                     + threadIdx.x)
+                                                    + lower_bound_x1];
+    int row;
+    row = (blockIdx.y * blockDim.y) + threadIdx.y;
+    if (row < n) {
+    
+        double Cvalue;
+        Cvalue = 0;
+        int i;
+        for (i = 0; i < m; i = i + 1) {
+        
+            Cvalue = Cvalue
+                     + ((objects[(row * m) + i] - w1[row - lower_bound_w1])
+                        * x1[i - lower_bound_x1]); 
+        }
+        tmp[row] = Cvalue;
+        __syncthreads()
+    } else {
+    
+         
+    } 
+    w1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_w1] = w[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x];
+    x1[((blockIdx.x * blockDim.x) + threadIdx.x) + lower_bound_x1] = x[(
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + threadIdx.x]; 
+}
+
+Optimal Branch Distribution cutoff: -1
+Optimal Params to move to shared: [x,w]
+
+169 + tick_z
+Program Statistics:
+    Total runtime: 3.915s

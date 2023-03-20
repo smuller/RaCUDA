@@ -30,7 +30,7 @@ let log_to_level log_str =
   | "info" -> 2
   | "warn" -> 3
   | "error" -> 4
-  | _ -> let () = Format.fprintf Format.std_formatter "Invalid Logging Level! Setting logging level to Debug" in 1
+  | _ -> let () = Format.fprintf Format.std_formatter "WARN - [CUDA_optimize] - Invalid Logging Level! Setting logging level to Debug" in 1
 
 (* Set the logging level here *)
 let logging_level = log_to_level("info")
@@ -466,13 +466,12 @@ let rec get_complexity_score (line: 'a cinstr) : int =
   match line with
   | CIf (_, block1, block2) ->
      1 + get_complexity_scores block1 + get_complexity_scores block2
-  | CWhile (_, block) ->
-     let block_score = get_complexity_scores block in
-     if block_score > 0 then 3 + block_score else 0 
+  | CWhile (_, block)
   | CFor (_, _, _, block) ->
      let block_score = get_complexity_scores block in
      if block_score > 0 then 3 + block_score else 0 
   | _ -> 1
+  
 and get_complexity_scores_l (block: 'a cinstr list) : int =
   List.fold_right (fun x y -> get_complexity_score x + y) block 0
 and get_complexity_scores ((_, block) : 'a cblock) : int =
@@ -513,7 +512,7 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
 (* This is really inefficient, we should fix it *)
 let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
 
-  let () = if should_log "info" then Format.fprintf fmt "\nRunning Branch Distribution with cutoff of %d \n" c in
+  let () = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Running Branch Distribution with cutoff of %d \n" c in
 
   let rec bd_ll a code_block =
     let bd_ll = bd_ll a in
@@ -630,7 +629,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     let used_array_params = List.filter (is_in_used) array_params in
 
     let array_param_ids = List.map (fun (id, _) -> id) used_array_params in 
-    let () = if should_log "info" then Format.fprintf fmt "Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
+    let () = if should_log "info" then Format.fprintf fmt "INFO - [CUDA_optimize] - Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
 
     (* Now start looking at the blocks *)
 
@@ -682,9 +681,18 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       | [] -> []
       | cinst :: rest -> (match cinst with
         | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest
-        | CIf(cl, (_, cb1), (_, cb2)) -> find_array_reads_clogic cl @ find_array_reads cb1 @ find_array_reads cb2 @ find_array_reads rest
+        | CIf(cl, (_, cb1), (_, cb2)) -> 
+          find_array_reads_clogic cl @ 
+          find_array_reads cb1 @ 
+          find_array_reads cb2 @ 
+          find_array_reads rest
         | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb @ find_array_reads rest
-        | CFor (cinsts, cl, cinsts1, (_, cb)) -> find_array_reads cinsts @ find_array_reads_clogic cl @ find_array_reads cinsts1 @ find_array_reads cb @ find_array_reads rest
+        | CFor (cinsts, cl, cinsts1, (_, cb)) -> 
+          find_array_reads cinsts @ 
+          find_array_reads_clogic cl @ 
+          find_array_reads cinsts1 @ 
+          find_array_reads cb @ 
+          find_array_reads rest
         | CReturn ex -> find_array_reads_cexpr ex
         | _ -> find_array_reads rest
       )
@@ -747,7 +755,9 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     let () = clean_hashtbl in 
     let print_hashtbl = 
       let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "debug" then Format.fprintf fmt "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
-      let print_bounds_for_id id = let () = if should_log "debug" then Format.fprintf fmt "------ Bounds for ID of %s --------- \n" id in let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
+      let print_bounds_for_id id =
+         let () = if should_log "debug" then Format.fprintf fmt "------ Bounds for ID of %s --------- \n" id in 
+         let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
       let _ = (List.map print_bounds_for_id array_param_ids) in  () in
     let () = print_hashtbl in 
 
@@ -845,15 +855,17 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       let rec rename_clval (c: 'a clval): 'a clval = 
         
         (match c with
-        | CArr(CVar id, fst_exp :: rest_exp_lst) -> if List.mem id array_param_ids
-                                                    then
-                                                      let (_ ,this_bound) = process_bounds id (fst_exp :: rest_exp_lst) in
-                                                      if is_bound_valid this_bound then 
-                                                        let variant_num_str = string_of_int (bound_to_variant_num id this_bound) in
-                                                        CArr(CVar (id ^ variant_num_str), emk useless_bound (CSub(rename_cexpr fst_exp, (emk useless_bound (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))) :: (List.map rename_cexpr rest_exp_lst))
-                                                      else
-                                                        CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
-                                                    else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
+        | CArr(CVar id, fst_exp :: rest_exp_lst) -> 
+          (if List.mem id array_param_ids
+            then
+              let (_ ,this_bound) = process_bounds id (fst_exp :: rest_exp_lst) in
+              if is_bound_valid this_bound then 
+                let variant_num_str = string_of_int (bound_to_variant_num id this_bound) in
+                CArr(CVar (id ^ variant_num_str),
+                  emk useless_bound (CSub(rename_cexpr fst_exp, (emk useless_bound (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))) :: (List.map rename_cexpr rest_exp_lst))
+              else
+                CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
+            else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst))))
         | CVar id -> CVar id
         | CArr (cv, exp_lst) -> CArr(rename_clval cv, (List.map rename_cexpr exp_lst))
         | CDeref clv -> CDeref(rename_clval clv)
@@ -936,7 +948,7 @@ type cprog = (id * Cabs.base_type * mem) list * cfunc list
     let distributed = 
       if cutoff > ~-1 
         then branch_distribution cutoff code fmt
-        else (let _ = if should_log "info" then Format.fprintf fmt "\nNot running branch distribution \n" in code) in 
+        else (let _ = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Not running branch distribution \n" in code) in 
     new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args fmt
   in
   (globals, List.map bdf funcs)
@@ -966,6 +978,43 @@ let branch_distribution_mult (prog: 'a cprog) fmt =
     else [(~-1, used_array_params, bdp ~-1 used_array_params)] in
   
   List.flatten (List.map bdp_params used_array_param_combinations)
+
+(* Generates a list of (branch_distribution_cutoff, code) for the OptDriver to find the best one of. *)
+let greedy_find_branch_distribution_cutoffs (prog: 'a cprog) fmt = 
+  let (globals, funcs) = prog in
+
+  (* ASSUMPTION THAT THERE IS ONLY ONE FUNCTION IN A FILE! (or that the arguments in each function are the same) *)
+
+  let (_, _, params, (_, code), _) = List.hd funcs in
+  let complexity_score = get_max_bd_code_complexity code fmt in
+
+  let half = complexity_score / 2 in
+  let half_point = if complexity_score mod 2 = 0 then half else half + (if complexity_score < 0 then -1 else 1) in
+
+  let () = Format.fprintf fmt "\n MAX COMPLEXITY IS %d \n" complexity_score in
+  let bdp c used_array_params = branch_distribution_prog c prog used_array_params fmt in
+  let bdp_params = 
+    if complexity_score > 10 then
+      [(0, [], bdp 0 []); 
+      (half_point, [], bdp half_point []); 
+      (complexity_score-1, [], bdp (complexity_score-1) [])]
+    else if complexity_score > 0 then
+      [(0, [], bdp 0 [])] 
+    else [] in
+    bdp_params
+
+let greedy_find_array_params (prog: 'a cprog) cutoff current_params fmt = 
+  let (globals, funcs) = prog in
+  let (_, _, params, (_, code), _) = List.hd funcs in
+  let array_params = List.filter is_param_bt_array params in
+  
+  (* Params that have not already been used *)
+  let potential_params = List.filter (fun x -> not (List.mem x current_params)) array_params in
+
+  let bdp_potential potential_param = (cutoff, (current_params @ [potential_param]), (branch_distribution_prog cutoff prog (current_params @ [potential_param]) fmt)) in
+  List.map bdp_potential potential_params
+
+  
   
 (** transformations = [optimization_function, optimization_name, required?]
     return [([performed_optimizations], code)]

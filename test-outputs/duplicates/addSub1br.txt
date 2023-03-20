@@ -1,0 +1,215 @@
+
+addSubArray1:
+    Bound: 7 + 1761 max(0, w)
+    Number of LP variables: 1050
+    Number of LP constraints: 965
+    Maximum focus functions in use: 51
+    LP solver time: 0.004s
+    
+
+ MAX COMPLEXITY IS 2 
+
+INFO - [CUDA_optimize] - Running Branch Distribution with cutoff of 0 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: []
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: []
+
+INFO - [CUDA_optimize] - Running Branch Distribution with cutoff of 0 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A]
+
+INFO - [CUDA_optimize] - Running Branch Distribution with cutoff of 0 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [B]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [B]
+
+INFO - [CUDA_optimize] - Running Branch Distribution with cutoff of 0 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A,B]
+
+INFO - [CUDA_optimize] - Not running branch distribution 
+INFO - [CUDA_optimize] - Running Global to Shared on array params: [A,B]
+Analysis for No Branch Distribution
+Running Global to Shared on array params: []
+addSubArray1:
+    Bound: 7 + 1761 max(0, w)
+    Number of LP variables: 1050
+    Number of LP constraints: 965
+    Maximum focus functions in use: 51
+    LP solver time: 0.004s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: []
+addSubArray1:
+    Bound: 7 + 1065 max(0, w)
+    Number of LP variables: 944
+    Number of LP constraints: 839
+    Maximum focus functions in use: 53
+    LP solver time: 0.004s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A]
+addSubArray1:
+    Bound: 57 + 1726 max(0, w)
+    Number of LP variables: 1270
+    Number of LP constraints: 1139
+    Maximum focus functions in use: 63
+    LP solver time: 0.007s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [A]
+addSubArray1:
+    Bound: 57 + 1044 max(0, w)
+    Number of LP variables: 1162
+    Number of LP constraints: 1011
+    Maximum focus functions in use: 65
+    LP solver time: 0.005s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [B]
+addSubArray1:
+    Bound: 495 + 501 max(0, w)
+    Number of LP variables: 1050
+    Number of LP constraints: 965
+    Maximum focus functions in use: 51
+    LP solver time: 0.004s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [B]
+addSubArray1:
+    Bound: 495 + 309 max(0, w)
+    Number of LP variables: 944
+    Number of LP constraints: 839
+    Maximum focus functions in use: 53
+    LP solver time: 0.005s
+    
+Analysis for No Branch Distribution
+Running Global to Shared on array params: [A,B]
+addSubArray1:
+    Bound: 545 + 466 max(0, w)
+    Number of LP variables: 1270
+    Number of LP constraints: 1139
+    Maximum focus functions in use: 63
+    LP solver time: 0.006s
+    
+Analysis for Branch Distribution of 0 
+Running Global to Shared on array params: [A,B]
+addSubArray1:
+    Bound: 545 + 288 max(0, w)
+    Number of LP variables: 1162
+    Number of LP constraints: 1011
+    Maximum focus functions in use: 65
+    LP solver time: 0.005s
+    
+
+Best Code generation:
+__global__ addSubArray1 ( int *A,  int *B,  int w,  int h) {
+                       
+                           signed long int lower_bound_A1;
+                           lower_bound_A1 = 0;
+                           __shared__ int A1[blockDim.x];
+                           A1[(blockIdx.x * blockDim.x) + threadIdx.x] = A[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_A1];
+                           signed long int lower_bound_B1;
+                           lower_bound_B1 = w
+                                            + (((w * threadIdx.x) * 2)
+                                               + ((w
+                                                   * (blockIdx.x * blockDim.x))
+                                                  * 2));
+                           __shared__ int B1[blockDim.x];
+                           B1[(blockIdx.x * blockDim.x) + threadIdx.x] = B[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_B1];
+                           signed long int lower_bound_B2;
+                           lower_bound_B2 = ((w * threadIdx.x) * 2)
+                                            + ((w * (blockIdx.x * blockDim.x))
+                                               * 2);
+                           __shared__ int B2[blockDim.x];
+                           B2[(blockIdx.x * blockDim.x) + threadIdx.x] = B[(
+                                                                    (
+                                                                    blockIdx.x
+                                                                    * 
+                                                                    blockDim.x)
+                                                                    + 
+                                                                    threadIdx.x)
+                                                                    + lower_bound_B2];
+                           int i;
+                           for (i = 0; i < w; i = i + 1) {
+                           
+                               int j;
+                               j = (blockIdx.x * blockDim.x) + threadIdx.x;
+                               B2[(((2 * j) * w) + i) - lower_bound_B2] = B2
+                                                                    [(
+                                                                    (
+                                                                    (2 * j)
+                                                                    * 
+                                                                    w) + 
+                                                                    i)
+                                                                    - 
+                                                                    lower_bound_B2]
+                                                                    + A1
+                                                                    [i
+                                                                    - 
+                                                                    lower_bound_A1];
+                               B1[((((2 * j) + 1) * w) + i) - lower_bound_B1] = B1
+                                                                    [(
+                                                                    (
+                                                                    (
+                                                                    (2 * j)
+                                                                    + 
+                                                                    1) * 
+                                                                    w) + 
+                                                                    i)
+                                                                    - 
+                                                                    lower_bound_B1]
+                                                                    - A1
+                                                                    [i
+                                                                    - 
+                                                                    lower_bound_A1];
+                               if (threadIdx.x == 2) {
+                               
+                                   B1[((((2 * j) + 1) * w) + i)
+                                      - lower_bound_B1] = B1
+                                                          [((((2 * j) + 1)
+                                                             * w)
+                                                            + i)
+                                                           - lower_bound_B1]
+                                                          + A1
+                                                            [i
+                                                             - lower_bound_A1];
+                               } else {
+                               
+                                    
+                               }  
+                           }
+                           A1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_A1] = A[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x];
+                           B1[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_B1] = B[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x];
+                           B2[((blockIdx.x * blockDim.x) + threadIdx.x)
+                              + lower_bound_B2] = B[(blockIdx.x * blockDim.x)
+                                                    + threadIdx.x]; 
+                       }
+
+Optimal Branch Distribution cutoff: 0
+Optimal Params to move to shared: [A,B]
+
+545 + tick_z
+Program Statistics:
+    Total runtime: 143.985s
