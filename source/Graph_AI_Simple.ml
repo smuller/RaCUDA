@@ -633,15 +633,15 @@ let bounds abs pe =
     in
     match bounds_gen_poly 2 pe with
     | Some (plb, pub) ->
-       (match (Poly.toCUDA plb, Poly.toCUDA pub)
+       (match (Poly.toCUDA plb, Poly.toCUDA pub, Poly.toCUDA (Poly.sub pub plb))
         with
-        | (Some clb, Some cub) ->
+        | (Some clb, Some cub, Some cdiff) ->
            (
              (* Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
               Poly.print pe
               CUDA.print_cexpr clb
               CUDA.print_cexpr cub; *)
-            Some (clb, cub))
+            Some (clb, cub, cdiff))
         | _ -> (*Format.fprintf Format.std_formatter "None\n";*) None)
     | None -> ((*Format.fprintf Format.std_formatter "None\n";*) None)
 

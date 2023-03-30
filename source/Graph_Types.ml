@@ -5,7 +5,7 @@ open Types
 
 type node = int
 
-type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
+type annot = (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr * unit CUDA_Types.cexpr) option ref
 type uexpr = unit expr
 type ulogic = unit logic
           

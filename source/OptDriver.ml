@@ -289,8 +289,7 @@
    (* let _ = IMP_Print.print_prog Format.std_formatter
       (globals, imp_file) in *)
    (* transform function calls with arguments and return values *)
-   let globals, (imp_file : ('a, (unit CUDA_Types.cexpr * unit CUDA_Types.cexpr)
-                                   option ref IMP.block)
+   let globals, (imp_file : ('a, Graph_Types.annot IMP.block)
                 Types.func_ list)
      = IMP.function_call_transformation (fun () -> ref None) globals imp_file in
    let globals = Utils.add_tick_var tick_var globals in
@@ -329,14 +328,14 @@
           print_newline ();
         *)
        match Graph_AI_Simple.Solver.bounds_gen (abs, cu) pe with
-       | Some (lb, ub) ->
+       | Some (lb, ub, diff) ->
           (*
           Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
             IMP_Print.print_expr e
             CUDA.print_cexpr lb
             CUDA.print_cexpr ub;
            *)
-          (ann e) := Some (lb, ub)
+          (ann e) := Some (lb, ub, diff)
        | None -> () (*Format.fprintf Format.std_formatter
                 "no bounds for %a :(\n"
                 IMP_Print.print_expr e *)
@@ -416,7 +415,7 @@
          match Frontc.parse_file !input_file stdout with
          | Frontc.PARSING_ERROR -> failwith "parse error"
          | Frontc.PARSING_OK ccode ->
-            let cuda =
+            let cuda : Graph_Types.annot CUDA_Types.cprog =
               CUDA.cuda_of_file (fun () -> ref None) !input_file ccode in
             cuda
        else 
