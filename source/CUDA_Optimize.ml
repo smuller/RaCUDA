@@ -559,7 +559,7 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
   in bd_bb (a, code_block)
 
 type bound = unit expr
-type ablock = (bound * bound) option ref cblock
+type ablock = (bound * bound * bound) option ref cblock
 
 
 let get_max_bd_code_complexity block fmt = 
@@ -589,7 +589,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
     | CArr( CVar(clv), [cexpr]) ->
        (match !(ann cexpr) with
         | None -> failwith "not annotated"
-        | Some (lb, ub) -> [(clv, lb, ub)]
+        | Some (lb, ub, diff) -> [(clv, lb, ub)]
        )
     | CDeref clv -> find_clval_arr_id clv
     | CRef clv -> find_clval_arr_id clv
@@ -633,7 +633,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
     (* Now start looking at the blocks *)
 
-    let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option list) = (
+    let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option list) = (
         let bound_refs = List.map (!) (List.map ann bounds) in (id, bound_refs)
       ) in
 
@@ -710,7 +710,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       let add_to_hashtbl id bound_ref =
         match bound_ref with
           | None -> Hashtbl.add bounds_hashtbl id None
-          | Some (lb, ub) -> Hashtbl.add bounds_hashtbl id (Some (id, lb, ub)) in
+          | Some (lb, ub, diff) -> Hashtbl.add bounds_hashtbl id (Some (id, lb, ub)) in
 
       let process_single_bound (id, bounds_refs) =  let _ = (List.map (add_to_hashtbl id) bounds_refs) in () in
       let _ = (List.map process_single_bound bounds_list) in () in
@@ -833,13 +833,13 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       List.flatten(List.map param_id_to_global array_param_ids) in
       
       (* Useless bound is just there to satisfy the type requirements, and it will eventually get replaced with a unit. *)
-      let useless_bound = ref (Some (emk () (CConst(CInt(0))), (emk () (CConst(CInt(0)))))) in
+      let useless_bound = ref (Some (emk () (CConst(CInt(0))), (emk () (CConst(CInt(0)))), emk () (CConst(CInt(0))))) in
 
       let is_bound_valid bound_refs:bool =
         let bound_ref = List.hd bound_refs in
         match bound_ref with
         | None -> false
-        | Some (lb, ub) -> true in
+        | Some (lb, ub, _) -> true in
 
       let bound_to_variant_num id bound_refs:int =
         let is_bounds_same lb ub (hashtbl_entry:(Types.id * unit CUDA_Types.cexpr * unit CUDA_Types.cexpr * int)):bool = 
@@ -848,7 +848,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
         let bound_ref = List.hd bound_refs in
         match bound_ref with
         | None -> 0
-        | Some (lb, ub) -> let id_bounds = Hashtbl.find cleaned_hashtbl id in
+        | Some (lb, ub, _) -> let id_bounds = Hashtbl.find cleaned_hashtbl id in
                            let (_, _, _, variant_num) = List.find (is_bounds_same lb ub) id_bounds in
                            variant_num in
 
@@ -891,7 +891,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
         | COr(cl1, cl2) -> COr(rename_clogic cl1, rename_clogic cl2)
         | CNot cl1 -> CNot(rename_clogic cl1)
         )
-      and rename_cinstr (code_instr: ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option ref CUDA_Types.cinstr): 'a cinstr =  
+      and rename_cinstr (code_instr: Graph_Types.annot CUDA_Types.cinstr): 'a cinstr =  
         match code_instr with
         | CAssign(cl, ce, b) -> CAssign(rename_clval cl, rename_cexpr ce, b)
         | CIf(cl, cb1, cb2) ->
@@ -980,7 +980,7 @@ let branch_distribution_mult (prog: 'a cprog) fmt =
   List.flatten (List.map bdp_params used_array_param_combinations)
 
 (* Generates a list of (branch_distribution_cutoff, code) for the OptDriver to find the best one of. *)
-let greedy_find_branch_distribution_cutoffs (prog: 'a cprog) fmt = 
+let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt = 
   let (globals, funcs) = prog in
 
   (* ASSUMPTION THAT THERE IS ONLY ONE FUNCTION IN A FILE! (or that the arguments in each function are the same) *)
