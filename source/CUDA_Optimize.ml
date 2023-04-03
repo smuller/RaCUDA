@@ -622,6 +622,11 @@ let is_bound_sharable (bound:(unit * unit CUDA_Types.cexpr_)):bool = (
   let (_,size) = expr_eval bound in
   match size with
   | CConst(CInt(_)) -> true
+  | CParam _ -> true
+  | CL (CVar v) when v = CUDA_Config.bdimx_var
+                     || v = CUDA_Config.bdimy_var
+                     || v = CUDA_Config.bdimz_var
+    -> true
   | _ -> false
 ) 
 
