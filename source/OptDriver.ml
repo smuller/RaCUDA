@@ -462,9 +462,14 @@
         (*Some (p, (CUDA_Types.reannot_prog (fun _ -> (ref None)) prog)) *)
         | None -> None
       in
+      let (globals, funcs) = prog in
+      let cleaned_hashtbl = CUDA_Optimize.gen_bound_hashtbl (List.hd funcs) fmt in
+      let sharable_params = CUDA_Optimize.find_sharable_ids cleaned_hashtbl in
+      let () = Format.fprintf fmt "INFO - [OptDriver] - Sharable Params: [%s] \n" (String.concat "," sharable_params) in
+
       let find_best_single_param prog current = 
         let opts = match current with
-          | Some (_, current_params, _, _) -> CUDA_Optimize.greedy_find_array_params prog greedy_best_cutoff current_params fmt
+          | Some (_, current_params, _, _) -> CUDA_Optimize.greedy_find_array_params prog greedy_best_cutoff current_params cleaned_hashtbl fmt
           | None -> failwith "Something went really wrong with find_best_single_param" in
         
         let _ = if List.length opts = 0 then

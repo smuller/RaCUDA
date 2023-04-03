@@ -613,7 +613,156 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
         | C.PTR _ | C.ARRAY _ -> true
         | _ -> false 
 
-    let new_global_to_shared_opt (t, id, params, block, b) used_params fmt : unit cfunc = (
+
+let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option list) = (
+  let bound_refs = List.map (!) (List.map ann bounds) in (id, bound_refs)
+)
+
+let is_bound_sharable (bound:(unit * unit CUDA_Types.cexpr_)):bool = (
+  let (_,size) = expr_eval bound in
+  match size with
+  | CConst(CInt(_)) -> true
+  | _ -> false
+) 
+
+let find_sharable_ids (cleaned_hashtbl:(id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t) = (
+  let ids = Hashtbl.fold (fun k _ acc -> k :: acc) cleaned_hashtbl [] in
+  let is_id_sharable id:bool = (
+    let bounds = Hashtbl.find cleaned_hashtbl id in
+    List.for_all (fun x -> x = true) (List.map (fun (_, _, _, bound, _) -> is_bound_sharable bound) bounds)
+  )
+  in List.filter is_id_sharable ids
+)
+
+
+(* Finds the bounds of ALL the params, then stores it into the hashtable *)
+let gen_bound_hashtbl (t, id, params, block, b) fmt : (id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t = (
+
+  let array_params = List.filter is_param_bt_array params in
+  let array_param_ids = List.map (fun (id, _) -> id) array_params in 
+  let () = if should_log "info" then Format.fprintf fmt "INFO - [CUDA_optimize] - Generating the bounds hashtable\n" in
+
+  (* Now start looking at the blocks *)
+  (* Find array writes finds all the array writes that are also array type params *)
+  let rec find_array_writes block =
+    (match block with 
+      | [] -> []       
+      | cinst :: rest ->
+          (match cinst with
+            | CIf (_, (_, block1), (_, block2)) -> (find_array_writes block1) @ (find_array_writes block2)
+            | CWhile (_, (_, block)) -> (find_array_writes block) @ (find_array_writes block)
+            | CFor (i1, _, i2, (_, b)) -> (find_array_writes i1) @ (find_array_writes i2) @ (find_array_writes b)
+            | CAssign(CArr(CVar id, cexprs), _, _) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
+            | CAssign(cl, _, _) -> []
+            | _ -> []
+          ) @ find_array_writes rest
+    ) in
+
+  let rec find_array_reads block = 
+    let rec find_array_reads_clval clv = (match clv with
+      | CVar id -> []
+      | CArr (CVar(id), cexprs) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
+      | CDeref cl -> find_array_reads_clval cl
+      | CRef cl -> find_array_reads_clval cl
+      | _ -> []
+    ) 
+    and find_array_reads_cexpr exp = let (_, exp) = exp in (match exp with
+      | CL clv -> find_array_reads_clval clv
+      | CAdd (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CSub (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CMul (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CDiv (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CMod (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CCall (_, cexprs) -> List.flatten (List.map find_array_reads_cexpr cexprs)
+      | _ -> []
+    )
+    and find_array_reads_clogic log = (match log with
+      | CCmp (ex1, _, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+      | CAnd (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
+      | COr (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
+      | CNot cl1 -> find_array_reads_clogic cl1
+    )
+  in
+    (match block with
+    | [] -> []
+    | cinst :: rest -> (match cinst with
+      | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest
+      | CIf(cl, (_, cb1), (_, cb2)) -> 
+        find_array_reads_clogic cl @ 
+        find_array_reads cb1 @ 
+        find_array_reads cb2 @ 
+        find_array_reads rest
+      | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb @ find_array_reads rest
+      | CFor (cinsts, cl, cinsts1, (_, cb)) -> 
+        find_array_reads cinsts @ 
+        find_array_reads_clogic cl @ 
+        find_array_reads cinsts1 @ 
+        find_array_reads cb @ 
+        find_array_reads rest
+      | CReturn ex -> find_array_reads_cexpr ex
+      | _ -> find_array_reads rest
+    )
+  ) in
+  
+  let (_,block_contents) = block in
+  let array_writes = find_array_writes block_contents in
+  let array_reads = find_array_reads block_contents in
+
+  (* Generating the hashtable *)
+
+  let bounds_hashtbl = Hashtbl.create 50 in
+  let cleaned_hashtbl = Hashtbl.create 50 in
+  let populate_hashtbl bounds_list = 
+    let add_to_hashtbl id bound_ref =
+      match bound_ref with
+        | None -> Hashtbl.add bounds_hashtbl id None
+        | Some (lb, ub, diff) -> Hashtbl.add bounds_hashtbl id (Some (id, lb, ub, diff)) in
+
+    let process_single_bound (id, bounds_refs) =  let _ = (List.map (add_to_hashtbl id) bounds_refs) in () in
+    let _ = (List.map process_single_bound bounds_list) in () in
+
+  let () = populate_hashtbl array_reads in
+  let () = populate_hashtbl array_writes in
+
+  (* Clean hashtbl removes the duplicates  *)
+  let clean_hashtbl = 
+    let is_some opt =
+      match opt with
+      | None -> false
+      | Some _ -> true in
+      
+    let to_result opt = 
+      match opt with 
+      | None -> ("a", emk () (CConst(CInt 0)), emk () (CConst(CInt 0)), emk () (CConst(CInt 0)))
+      | Some (id, lb, ub, diff) -> (id, lb, ub, diff) in
+
+    let clean_single_id id = 
+      let values = Hashtbl.find_all bounds_hashtbl id in
+      let () = if List.mem None values then if should_log "warn" then Format.fprintf fmt "%s is missing bounds \n" id else () in
+      let non_none_values = List.map to_result (List.filter is_some values) in
+
+      let rec helper (vals) (current) = 
+        match vals with
+        | [] -> current
+        | value::rest -> if List.mem value current then helper rest current else helper rest (current @ [value]) in
+      
+      let cleaned = helper non_none_values [] in 
+
+      let rec add_variant_num values variant_num = 
+        match values with
+        | [] -> []
+        | (id, lb, ub, diff)::rest -> [(id, lb, ub, diff, variant_num)] @ add_variant_num rest (variant_num + 1) in
+
+      let cleaned_with_variant_num = add_variant_num cleaned 1 in
+      Hashtbl.add cleaned_hashtbl id cleaned_with_variant_num in
+
+    let _ = (List.map clean_single_id array_param_ids) in () in
+
+  let () = clean_hashtbl in cleaned_hashtbl
+)
+
+
+let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hashtbl fmt : unit cfunc = (
     (* Some helper functions*)
     let print_debug (id, lbs, ubs) =
       if should_log "debug" then Format.fprintf fmt "ID of %s in with LBS %a AND UBS %a\n"
@@ -630,136 +779,6 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
 
     let array_param_ids = List.map (fun (id, _) -> id) used_array_params in 
     let () = if should_log "info" then Format.fprintf fmt "INFO - [CUDA_optimize] - Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
-
-    (* Now start looking at the blocks *)
-
-    let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option list) = (
-        let bound_refs = List.map (!) (List.map ann bounds) in (id, bound_refs)
-      ) in
-
-    (* Find array writes finds all the array writes that are also array type params *)
-    let rec find_array_writes block =
-      (match block with 
-        | [] -> []       
-        | cinst :: rest ->
-            (match cinst with
-              | CIf (_, (_, block1), (_, block2)) -> (find_array_writes block1) @ (find_array_writes block2)
-              | CWhile (_, (_, block)) -> (find_array_writes block) @ (find_array_writes block)
-              | CFor (i1, _, i2, (_, b)) -> (find_array_writes i1) @ (find_array_writes i2) @ (find_array_writes b)
-              | CAssign(CArr(CVar id, cexprs), _, _) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
-              | CAssign(cl, _, _) -> []
-              | _ -> []
-            ) @ find_array_writes rest
-      ) in
-
-    let rec find_array_reads block = 
-      let rec find_array_reads_clval clv = (match clv with
-        | CVar id -> []
-        | CArr (CVar(id), cexprs) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
-        | CDeref cl -> find_array_reads_clval cl
-        | CRef cl -> find_array_reads_clval cl
-        | _ -> []
-      ) 
-      and find_array_reads_cexpr exp = let (_, exp) = exp in (match exp with
-        | CL clv -> find_array_reads_clval clv
-        | CAdd (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CSub (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CMul (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CDiv (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CMod (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CCall (_, cexprs) -> List.flatten (List.map find_array_reads_cexpr cexprs)
-        | _ -> []
-      )
-      and find_array_reads_clogic log = (match log with
-        | CCmp (ex1, _, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-        | CAnd (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
-        | COr (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
-        | CNot cl1 -> find_array_reads_clogic cl1
-      )
-    in
-      (match block with
-      | [] -> []
-      | cinst :: rest -> (match cinst with
-        | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest
-        | CIf(cl, (_, cb1), (_, cb2)) -> 
-          find_array_reads_clogic cl @ 
-          find_array_reads cb1 @ 
-          find_array_reads cb2 @ 
-          find_array_reads rest
-        | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb @ find_array_reads rest
-        | CFor (cinsts, cl, cinsts1, (_, cb)) -> 
-          find_array_reads cinsts @ 
-          find_array_reads_clogic cl @ 
-          find_array_reads cinsts1 @ 
-          find_array_reads cb @ 
-          find_array_reads rest
-        | CReturn ex -> find_array_reads_cexpr ex
-        | _ -> find_array_reads rest
-      )
-    ) in
-    
-    let (_,block_contents) = block in
-    let array_writes = find_array_writes block_contents in
-    let array_reads = find_array_reads block_contents in
-
-    (* Generating the hashtable *)
-
-    let bounds_hashtbl = Hashtbl.create 50 in
-    let cleaned_hashtbl = Hashtbl.create 50 in
-    let populate_hashtbl bounds_list = 
-      let add_to_hashtbl id bound_ref =
-        match bound_ref with
-          | None -> Hashtbl.add bounds_hashtbl id None
-          | Some (lb, ub, diff) -> Hashtbl.add bounds_hashtbl id (Some (id, lb, ub)) in
-
-      let process_single_bound (id, bounds_refs) =  let _ = (List.map (add_to_hashtbl id) bounds_refs) in () in
-      let _ = (List.map process_single_bound bounds_list) in () in
-
-    let () = populate_hashtbl array_reads in
-    let () = populate_hashtbl array_writes in
-
-    (* Clean hashtbl removes the duplicates  *)
-    let clean_hashtbl = 
-      let is_some opt =
-        match opt with
-        | None -> false
-        | Some _ -> true in
-        
-      let to_result opt = 
-        match opt with 
-        | None -> ("a", emk () (CConst(CInt 0)), emk () (CConst(CInt 0)))
-        | Some (id, lb, ub) -> (id, lb, ub) in
-
-      let clean_single_id id = 
-        let values = Hashtbl.find_all bounds_hashtbl id in
-        let () = if List.mem None values then if should_log "warn" then Format.fprintf fmt "%s is missing bounds \n" id else () in
-        let non_none_values = List.map to_result (List.filter is_some values) in
-
-        let rec helper (vals) (current) = 
-          match vals with
-          | [] -> current
-          | value::rest -> if List.mem value current then helper rest current else helper rest (current @ [value]) in
-        
-        let cleaned = helper non_none_values [] in 
-
-        let rec add_variant_num values variant_num = 
-          match values with
-          | [] -> []
-          | (id, lb, ub)::rest -> [(id, lb, ub, variant_num)] @ add_variant_num rest (variant_num + 1) in
-
-        let cleaned_with_variant_num = add_variant_num cleaned 1 in
-        Hashtbl.add cleaned_hashtbl id cleaned_with_variant_num in
-
-      let _ = (List.map clean_single_id array_param_ids) in () in
-
-    let () = clean_hashtbl in 
-    let print_hashtbl = 
-      let print_bound bound = let (id, lb, ub, variant_num) = bound in if should_log "debug" then Format.fprintf fmt "    %s_%d has \nLB of %a \nUB of %a \n\n" id variant_num CUDA.print_cexpr(expr_eval (lb)) CUDA.print_cexpr(expr_eval (ub)) in 
-      let print_bounds_for_id id =
-         let () = if should_log "debug" then Format.fprintf fmt "------ Bounds for ID of %s --------- \n" id in 
-         let _ = (List.map print_bound (Hashtbl.find cleaned_hashtbl id)) in () in
-      let _ = (List.map print_bounds_for_id array_param_ids) in  () in
-    let () = print_hashtbl in 
 
     (* Helper code for code generation portion *)
 
@@ -787,24 +806,24 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
           ) in  
     
     let global_convert_to_shared = 
-      let bring_bound_to_shared (id, bt) (_, lb, ub, variant_num) = (
+      let bring_bound_to_shared (id, bt) (_, lb, ub, diff, variant_num) = (
         let pointer_bt = get_pointer_bt bt in
         let variant_num_str = string_of_int variant_num in
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         [
-          (* CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
+          CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
           CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
           (* CDecl ("upper_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
           (* CAssign(CVar("upper_bound_" ^ id ^ variant_num_str), expr_eval ub, true); *)
           CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
-          (* CAssign(CVar("size_" ^ id ^ variant_num_str), emk () (CSub(emk () (CL(CVar("upper_bound_" ^ id ^ variant_num_str))), emk() (CL(CVar("lower_bound_"^ id ^ variant_num_str))))), true); *)
-          CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("blockDim.x")), []);
+          CAssign(CVar("size_" ^ id ^ variant_num_str), expr_eval diff, true);
+          CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("BLOCKSIZE")), []);
           (CAssign ((param_to_clval (id ^ variant_num_str,
                                      bt,
-                                     Some (thread_position_var))
+                                     Some (emk () (CL(CVar("threadIdx.x")))))
                                      (Some tvar_as_exp)
                     ),
-                    (emk () (CL (param_to_clval (id, bt, Some  (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str))))))) (Some tvar_as_exp)))) ,true))
+                    (emk () (CL (param_to_clval (id, bt, Some  (thread_position_var)) (Some tvar_as_exp)))) ,true))
         ]) in 
 
       let param_id_to_shared id = 
@@ -815,15 +834,15 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
       List.flatten(List.map param_id_to_shared array_param_ids) in
     
     let shared_back_to_global = 
-      let shared_back_to_global_helper (id, bt) (_, lb, ub, variant_num)=
+      let shared_back_to_global_helper (id, bt) (_, lb, ub, diff, variant_num)=
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         let variant_num_str = string_of_int variant_num in                            
-          (CAssign ((param_to_clval (id ^ variant_num_str,
+          (CAssign ((param_to_clval (id,
                                      bt,
-                                     Some (emk () (CAdd(thread_position_var, emk () (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))))
+                                     Some (thread_position_var))
                                      (Some tvar_as_exp)
                     ),
-                    (emk () (CL (param_to_clval (id, bt, Some (thread_position_var)) (Some tvar_as_exp)))) ,true)) in
+                    (emk () (CL (param_to_clval (id ^ variant_num_str, bt, Some (emk () (CL(CVar("threadIdx.x"))))) (Some tvar_as_exp)))) ,true)) in
 
         let param_id_to_global id = 
           let param_pair = List.find (fun (x, _) -> x = id) params in
@@ -842,14 +861,14 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
         | Some (lb, ub, _) -> true in
 
       let bound_to_variant_num id bound_refs:int =
-        let is_bounds_same lb ub (hashtbl_entry:(Types.id * unit CUDA_Types.cexpr * unit CUDA_Types.cexpr * int)):bool = 
-          let (_, lb_h, ub_h, _) = hashtbl_entry in List.mem lb [lb_h] && List.mem ub [ub_h] in
+        let is_bounds_same lb ub (hashtbl_entry:(Types.id * unit CUDA_Types.cexpr * unit CUDA_Types.cexpr * unit CUDA_Types.cexpr * int)):bool = 
+          let (_, lb_h, ub_h, _, _) = hashtbl_entry in List.mem lb [lb_h] && List.mem ub [ub_h] in
 
         let bound_ref = List.hd bound_refs in
         match bound_ref with
         | None -> 0
         | Some (lb, ub, _) -> let id_bounds = Hashtbl.find cleaned_hashtbl id in
-                           let (_, _, _, variant_num) = List.find (is_bounds_same lb ub) id_bounds in
+                           let (_, _, _, _, variant_num) = List.find (is_bounds_same lb ub) id_bounds in
                            variant_num in
 
       let rec rename_clval (c: 'a clval): 'a clval = 
@@ -862,7 +881,7 @@ let rec find_array_ids vctx p m ((annot, block): ablock)  =
               if is_bound_valid this_bound then 
                 let variant_num_str = string_of_int (bound_to_variant_num id this_bound) in
                 CArr(CVar (id ^ variant_num_str),
-                  emk useless_bound (CSub(rename_cexpr fst_exp, (emk useless_bound (CL(CVar("lower_bound_" ^ id ^ variant_num_str)))))) :: (List.map rename_cexpr rest_exp_lst))
+                  emk useless_bound (CSub(rename_cexpr fst_exp, (emk useless_bound (CConst(CInt(0)))))) :: (List.map rename_cexpr rest_exp_lst))
               else
                 CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
             else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst))))
@@ -939,7 +958,7 @@ type cfunc = string * (id * Cabs.base_type) list * cblock * bool
 type cprog = (id * Cabs.base_type * mem) list * cfunc list
  *)
 
- let branch_distribution_prog (cutoff: int) ((globals, funcs): 'a cprog) (used_args) fmt =
+ let branch_distribution_prog (cutoff: int) ((globals, funcs): 'a cprog) (used_args) bounds_hashtbl fmt =
 
   (* let bdf_2 (rt, name, args, code, kernel) = new_global_to_shared_opt (rt, name, args, branch_distribution cutoff code, kernel)
   in let () = List.hd(List.map bdf_2 funcs) in *)
@@ -949,11 +968,11 @@ type cprog = (id * Cabs.base_type * mem) list * cfunc list
       if cutoff > ~-1 
         then branch_distribution cutoff code fmt
         else (let _ = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Not running branch distribution \n" in code) in 
-    new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args fmt
+    new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args bounds_hashtbl fmt
   in
   (globals, List.map bdf funcs)
    
-let branch_distribution_mult (prog: 'a cprog) fmt =
+(* let branch_distribution_mult (prog: 'a cprog) fmt =
 
   let (globals, funcs) = prog in
 
@@ -977,7 +996,7 @@ let branch_distribution_mult (prog: 'a cprog) fmt =
       [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params)] 
     else [(~-1, used_array_params, bdp ~-1 used_array_params)] in
   
-  List.flatten (List.map bdp_params used_array_param_combinations)
+  List.flatten (List.map bdp_params used_array_param_combinations) *)
 
 (* Generates a list of (branch_distribution_cutoff, code) for the OptDriver to find the best one of. *)
 let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt = 
@@ -991,8 +1010,11 @@ let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt 
   let half = complexity_score / 2 in
   let half_point = if complexity_score mod 2 = 0 then half else half + (if complexity_score < 0 then -1 else 1) in
 
+  (* Bounds hashtable is empty because it does not run global_to_shared *)
+  let empty_hashtbl: (id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t = Hashtbl.create 10 in
+
   let () = Format.fprintf fmt "\n MAX COMPLEXITY IS %d \n" complexity_score in
-  let bdp c used_array_params = branch_distribution_prog c prog used_array_params fmt in
+  let bdp c used_array_params = branch_distribution_prog c prog used_array_params empty_hashtbl fmt in
   let bdp_params = 
     if complexity_score > 10 then
       [(0, [], bdp 0 []); 
@@ -1003,15 +1025,16 @@ let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt 
     else [] in
     bdp_params
 
-let greedy_find_array_params (prog: 'a cprog) cutoff current_params fmt = 
+let greedy_find_array_params (prog: 'a cprog) cutoff current_params cleaned_hashtbl fmt = 
   let (globals, funcs) = prog in
   let (_, _, params, (_, code), _) = List.hd funcs in
   let array_params = List.filter is_param_bt_array params in
+  let sharable_params = find_sharable_ids cleaned_hashtbl in
   
   (* Params that have not already been used *)
-  let potential_params = List.filter (fun x -> not (List.mem x current_params)) array_params in
+  let potential_params = List.filter (fun x -> (not (List.mem x current_params) && (let (id, _) = x in List.mem id sharable_params ))) array_params in
 
-  let bdp_potential potential_param = (cutoff, (current_params @ [potential_param]), (branch_distribution_prog cutoff prog (current_params @ [potential_param]) fmt)) in
+  let bdp_potential potential_param = (cutoff, (current_params @ [potential_param]), (branch_distribution_prog cutoff prog (current_params @ [potential_param]) cleaned_hashtbl fmt)) in
   List.map bdp_potential potential_params
 
   
