@@ -505,11 +505,9 @@ let bounds abs pe =
     let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
     let cmul (e1, e2) = emk () (CAdd (e1, e2)) in
     let cconst e = emk () (CConst e) in
-    (*
-    let _ = Format.fprintf Format.std_formatter "bounds_gen %a\n"
+    (* let _ = Format.fprintf Format.std_formatter "bounds_gen %a\n"
               Poly.print pe
-    in
-     *)
+    in *)
     let add_opt b1 b2 =
       match (b1, b2) with
       | (Some b1, Some b2) -> Some (Poly.add b1 b2)
@@ -546,18 +544,19 @@ let bounds abs pe =
              (match bounds_gen_poly (depth - 1) p with
               | None -> None
               | Some (lb, ub) ->
-                 let poly_var = match var with
-                   | Some var -> Poly.of_monom (Monom.of_var var) 1.0
-                   | None -> Poly.const 1.0
-                 in
-                 Some (Poly.mul lb poly_var, Poly.mul ub poly_var)
+                 (match var with
+                  | Some var ->
+                     Some (Poly.const 0.0,
+                           Poly.mul ub (Poly.of_monom (Monom.of_var var) 1.0))
+                  | None -> Some (lb, ub)
+                 )
              )
         with Not_found -> None
       in
       let open CUDA_Config in
-      sc_r_add_opt get_dim_bds (Some X, Some tidx_var)
-        (sc_r_add_opt get_dim_bds (Some Y, Some tidy_var)
-           (sc_r_add_opt get_dim_bds (Some Z, Some tidz_var)
+      sc_r_add_opt get_dim_bds (Some X, Some bdimx_var)
+        (sc_r_add_opt get_dim_bds (Some Y, Some bdimy_var)
+           (sc_r_add_opt get_dim_bds (Some Z, Some bdimz_var)
               (get_dim_bds (None, None))))
     in
     let bounds_from_presb f e =
@@ -606,7 +605,17 @@ let bounds abs pe =
                     if Factor.degree f = 1 && e = 1
                     then
                       let v = factor_var f in
-                      if is_param (factor_var f) then
+                      let open CUDA_Config in
+                      if factor_var f = tidx_var then
+                        Some (Poly.const 0.0,
+                              Poly.of_monom (Monom.of_var bdimx_var) 1.0)
+                      else if factor_var f = tidy_var then
+                        Some (Poly.const 0.0,
+                              Poly.of_monom (Monom.of_var bdimy_var) 1.0)
+                      else if factor_var f = tidz_var then
+                        Some (Poly.const 0.0,
+                              Poly.of_monom (Monom.of_var bdimz_var) 1.0)
+                      else if is_param (factor_var f) then
                         (* This is a CUDA builtin or function parameter, we
                          * can use it as its own bound *)
                         let v = factor_var f in
@@ -636,8 +645,8 @@ let bounds abs pe =
        (match (Poly.toCUDA plb, Poly.toCUDA pub, Poly.toCUDA (Poly.sub pub plb))
         with
         | (Some clb, Some cub, Some cdiff) ->
-           (
-             (* Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
+           ((*
+             Format.fprintf Format.std_formatter "Bounds for %a:\nlb: %a\nub: %a\n"
               Poly.print pe
               CUDA.print_cexpr clb
               CUDA.print_cexpr cub; *)
