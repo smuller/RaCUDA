@@ -447,17 +447,17 @@ and print_args fmt l =
   | [x] -> print_cexpr fmt x
   | a::t -> fprintf fmt "%a,@ %a" print_cexpr a print_args t
 and print_cexpr fmt e =
-  let paren_helper binop e1 e2= 
+  let paren_helper binop e1 e2 = 
     match edesc e1 with 
     | CL _|CConst _|CParam _ -> 
       (match edesc e2 with 
-      | CL _|CConst _|CParam _ -> (fprintf fmt "@[@[%a@]@ %s @[%a@]@]" print_cexpr e1 binop print_cexpr e2)
-      | _ ->  (fprintf fmt "@[@[%a@]@ %s @[(%a)@]@]" print_cexpr e1 binop print_cexpr e2)
+      | CL _|CConst _|CParam _ -> (fprintf fmt "%a %s %a" print_cexpr e1 binop print_cexpr e2)
+      | _ ->  (fprintf fmt "%a %s (%a)" print_cexpr e1 binop print_cexpr e2)
       )
     | _ -> 
       (match edesc e2 with 
-      | CL _|CConst _|CParam _ -> (fprintf fmt "@[@[(%a)@]@ %s @[%a@]@]" print_cexpr e1 binop print_cexpr e2)
-      | _ ->  (fprintf fmt "@[@[(%a)@]@ %s @[(%a)@]@]" print_cexpr e1 binop print_cexpr e2)
+      | CL _|CConst _|CParam _ -> (fprintf fmt "(%a) %s %a" print_cexpr e1 binop print_cexpr e2)
+      | _ ->  (fprintf fmt "(%a) %s (%a)" print_cexpr e1 binop print_cexpr e2)
       )
   in match edesc e with
   | CL v -> print_clval fmt v
@@ -468,10 +468,10 @@ and print_cexpr fmt e =
   | CMul (e1, e2) -> paren_helper "*" e1 e2
   | CDiv (e1, e2) -> paren_helper "/" e1 e2
   | CMod (e1, e2) -> paren_helper "%%" e1 e2
-  | CMin args -> fprintf fmt "@[min(%a)@]" print_args args
-  | CMax args -> fprintf fmt "@[max(%a)@]" print_args args
+  | CMin args -> fprintf fmt "min(%a)" print_args args
+  | CMax args -> fprintf fmt "max(%a)" print_args args
   | CCall (s, args) ->
-     fprintf fmt "@[%s(%a)@]" s print_args args
+     fprintf fmt "%s(%a)" s print_args args
 let rec print_clogic fmt l =
   let string_of_op = function Eq -> "==" | Le -> "<=" | Lt -> "<"
                               | Gt -> ">" | Ge -> ">=" | Ne -> "!="
@@ -527,7 +527,7 @@ let rec string_of_base_type typ id=
    | C.ARRAY (b_type, expr) -> string_of_base_type b_type "" ^ id ^ "["  ^ print_expression expr 0 ^ "]"
    | C.STRUCT (name, n_groups) -> "struct " ^ print_fields name n_groups
    | C.UNION (name, n_groups) -> "union " ^ print_fields name n_groups
-   | _ -> "other"
+   | _ -> "void "
 
 and print_fields id (flds) =
 
@@ -704,8 +704,9 @@ and print_farg fmt arg =
    let (t, name) = arg in fprintf fmt "@[<h> %s@]" (string_of_base_type name t) 
 
 let print_cfunc fmt (rt, name, args, b, kernel) =
-  fprintf fmt "@[<v>@[<h>%s%s (%a) {@]@ %a @ }@]"
+  fprintf fmt "@[<v>@[<h>%s%s%s (%a) {@]@ %a @ }@]"
     (if kernel then "__global__ " else (Printf.printf "not a kernel!\n"; ""))
+    (string_of_base_type rt "")
     name
     print_ids args
     print_cblock b

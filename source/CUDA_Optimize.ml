@@ -618,8 +618,26 @@ let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit
   let bound_refs = List.map (!) (List.map ann bounds) in (id, bound_refs)
 )
 
-let is_bound_sharable (bound:(unit * unit CUDA_Types.cexpr_)):bool = (
-  let (_,size) = expr_eval bound in
+
+let print_is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :unit = (
+  let _ = Format.fprintf fmt "The lb is %a \n" CUDA.print_cexpr (expr_eval lb) in
+  let _ = Format.fprintf fmt "The ub is %a \n" CUDA.print_cexpr (expr_eval ub) in
+  let _ = Format.fprintf fmt "The size is %a \n" CUDA.print_cexpr (expr_eval size) in
+  let (_,size) = expr_eval size in
+  let answer = (match size with
+    | CConst(CInt(_)) -> "true"
+    | CParam _ -> "true"
+    | CL (CVar v) when v = CUDA_Config.bdimx_var
+                      || v = CUDA_Config.bdimy_var
+                      || v = CUDA_Config.bdimz_var
+      ->  "true"
+    | _ -> "false")
+  in Format.fprintf fmt "Sharable is %s \n\n" answer
+)
+
+let is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :bool = (
+  let () = print_is_bound_sharable lb ub size fmt in
+  let (_,size) = expr_eval size in
   match size with
   | CConst(CInt(_)) -> true
   | CParam _ -> true
@@ -630,11 +648,12 @@ let is_bound_sharable (bound:(unit * unit CUDA_Types.cexpr_)):bool = (
   | _ -> false
 ) 
 
-let find_sharable_ids (cleaned_hashtbl:(id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t) = (
+let find_sharable_ids (cleaned_hashtbl:(id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t) fmt = (
   let ids = Hashtbl.fold (fun k _ acc -> k :: acc) cleaned_hashtbl [] in
   let is_id_sharable id:bool = (
+    let () = Format.fprintf fmt "INFO - [CUDA_optimize] Checking if id %s is sharable\n" id in
     let bounds = Hashtbl.find cleaned_hashtbl id in
-    List.for_all (fun x -> x = true) (List.map (fun (_, _, _, bound, _) -> is_bound_sharable bound) bounds)
+    List.for_all (fun x -> x = true) (List.map (fun (_, lb, ub, size, _) -> is_bound_sharable lb ub size fmt) bounds)
   )
   in List.filter is_id_sharable ids
 )
@@ -816,12 +835,12 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
         let variant_num_str = string_of_int variant_num in
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         [
-          CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
-          CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
+          (* CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
+          CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
           (* CDecl ("upper_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
           (* CAssign(CVar("upper_bound_" ^ id ^ variant_num_str), expr_eval ub, true); *)
-          CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
-          CAssign(CVar("size_" ^ id ^ variant_num_str), expr_eval diff, true);
+          (* CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
+          CAssign(CVar("size_" ^ id ^ variant_num_str), expr_eval diff, true); *)
           CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("BLOCKSIZE")), []);
           (CAssign ((param_to_clval (id ^ variant_num_str,
                                      bt,
@@ -836,7 +855,7 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
         let bounds_list = (Hashtbl.find cleaned_hashtbl id) in
         List.flatten(List.map (bring_bound_to_shared param_pair) bounds_list) in
       
-      List.flatten(List.map param_id_to_shared array_param_ids) in
+      List.flatten(List.map param_id_to_shared array_param_ids) @ [CSync] in
     
     let shared_back_to_global = 
       let shared_back_to_global_helper (id, bt) (_, lb, ub, diff, variant_num)=
@@ -886,7 +905,7 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
               if is_bound_valid this_bound then 
                 let variant_num_str = string_of_int (bound_to_variant_num id this_bound) in
                 CArr(CVar (id ^ variant_num_str),
-                  emk useless_bound (CSub(rename_cexpr fst_exp, (emk useless_bound (CConst(CInt(0)))))) :: (List.map rename_cexpr rest_exp_lst))
+                  emk useless_bound (CL(CVar("threadIdx.x"))) :: (List.map rename_cexpr rest_exp_lst))
               else
                 CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
             else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst))))
@@ -1030,11 +1049,11 @@ let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt 
     else [] in
     bdp_params
 
-let greedy_find_array_params (prog: 'a cprog) cutoff current_params cleaned_hashtbl fmt = 
+let greedy_find_array_params (prog: 'a cprog) cutoff current_params sharable_params  cleaned_hashtbl fmt = 
   let (globals, funcs) = prog in
   let (_, _, params, (_, code), _) = List.hd funcs in
   let array_params = List.filter is_param_bt_array params in
-  let sharable_params = find_sharable_ids cleaned_hashtbl in
+  (* let sharable_params = find_sharable_ids cleaned_hashtbl fmt in *)
   
   (* Params that have not already been used *)
   let potential_params = List.filter (fun x -> (not (List.mem x current_params) && (let (id, _) = x in List.mem id sharable_params ))) array_params in
