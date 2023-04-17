@@ -452,7 +452,10 @@
       in 
       match best with 
         | None -> let _ = Format.fprintf fmt "WARN - [OptDriver] - Failed to get a greedy best branch distribution cutoff!\n" in -1
-        | Some (cutoff, p) -> let _ = Format.fprintf fmt "INFO - [OptDriver] - Greedy best cutoff is %d\n" cutoff in cutoff
+        | Some (cutoff, p) -> if cutoff < 0 then 
+          let _ = Format.fprintf fmt "INFO - [OptDriver] - No improvement detected with branch distribution\n" in cutoff
+          else
+            let _ = Format.fprintf fmt "INFO - [OptDriver] - Greedy best branch distribution complexity cutoff is %d\n" (cutoff) in cutoff
       in
      
     let greedy_used_array_params = 
@@ -515,41 +518,6 @@
               let () = Format.fprintf fmt "INFO - [OptDriver] - No Greedy improvement, we have found the best set" in
               current in
       find_best_all prog initres in 
-
-(* 
-     let initres =
-       match analyze_cu_prog tick_var p m prog fmt with
-       | Some (_, p) -> Some (~-1, [], p, prog)
-       (*Some (p, (CUDA_Types.reannot_prog (fun _ -> (ref None)) prog)) *)
-       | None -> None
-     in
-     (* Do all of the optimizing *)
-     let opts = CUDA_Optimize.branch_distribution_mult prog fmt in
-     let best =
-      List.fold_left
-        (fun best cuda ->
-          let (branch_distribution_cutoff, used_array_params, cuda_code) = cuda in
-          let cuda_code : Graph.annot CUDA_Types.cprog =
-            CUDA_Types.reannot_prog (fun _ -> ref None) cuda_code in
-          let () = if branch_distribution_cutoff >= 0 then
-            Format.fprintf fmt "Analysis for Branch Distribution of %d \n" branch_distribution_cutoff
-           else Format.fprintf fmt "Analysis for No Branch Distribution\n"in
-
-           let () = Format.fprintf fmt "Running Global to Shared on array params: [%s]" (String.concat "," (List.map (fun (x,_) -> x) used_array_params)) in
-
-          (* CUDA.print_cprog Format.std_formatter cuda; *)
-          match (analyze_cu_prog_no_annots tick_var p m cuda_code fmt, best) with
-          | (None, _) -> let () = Format.fprintf fmt "\nFAILED TO ANALYZE:\n" in let _ = CUDA.print_cprog fmt cuda_code in best
-          | (Some (annot, p), None) -> Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
-          | (Some (_, p), Some (best_cutoff,best_params,best_poly, best_prog)) ->
-             if Polynom.Poly.heuristic_less p best_poly then
-               Some (branch_distribution_cutoff, used_array_params, p, cuda_code)
-             else
-               best
-        )
-        initres
-        opts
-     in *)
      match greedy_used_array_params with
      | None -> failwith "not able to analyze"
      | Some (branch_distribution_cutoff,array_params,bound, cuda) ->

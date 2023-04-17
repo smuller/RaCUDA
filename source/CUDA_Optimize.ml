@@ -6,20 +6,6 @@ module C = Cabs
 
          module IdMap = Map.Make(Id)
 
-                      (*
-let 
-_to_CUDA (lbs, ubs) =
-  let bd_to_CUDA neg (k, l) =
-    let k = if neg then ~-k else k in
-    CDiv (Presburger.L.toCUDA l, CConst (CInt k))
-  in
-  let _ = Printf.printf "%d lbs, %d ubs\n" (List.length lbs) (List.length ubs)
-  in
-  match (lbs, ubs) with
-  | ([lb], [ub]) -> Some (bd_to_CUDA false lb, bd_to_CUDA true ub)
-  | _ -> None
-                       *)
-
 
 
 (* Levels include Debug:1, Info:2, Warning:3, and Error:4 *)
@@ -38,6 +24,7 @@ let logging_level = log_to_level("info")
 let should_log log = log_to_level(log) >= logging_level 
 
          
+(* While Polynom does a good job with simplification of expressions, this goes a little further *)
 let rec expr_eval (expr: 'a cexpr) : 'a cexpr = 
   let cadd (e1, e2) = emk () (CAdd (e1, e2)) in
   let cmul (e1, e2) = emk () (CMul (e1, e2)) in
@@ -461,7 +448,7 @@ and is_block_equal((_, block1): 'a cblock) ((_, block2): 'a cblock) : bool =
 
 (** ---------------------------------------------------------------------------------- *)
 
-
+(* Calculate the complexity score of a single instruction, this can be expanded upon to make it more complex*)
 let rec get_complexity_score (line: 'a cinstr) : int =
   match line with
   | CIf (_, block1, block2) ->
@@ -471,13 +458,16 @@ let rec get_complexity_score (line: 'a cinstr) : int =
      let block_score = get_complexity_scores block in
      if block_score > 0 then 3 + block_score else 0 
   | _ -> 1
-  
+
+  (* Calculate the total complexity score of a list of instructions *)
 and get_complexity_scores_l (block: 'a cinstr list) : int =
   List.fold_right (fun x y -> get_complexity_score x + y) block 0
 and get_complexity_scores ((_, block) : 'a cblock) : int =
   get_complexity_scores_l block
 
-(** Return type is (Common, lst1 prev, lst1 after, lst2 prev, lst2 after) as well as the max_complexity*)
+(* Find the longest common code block between two blocks,
+   and return the common code and their respective previous and next segments, as well as the max_complexity.
+   Complexity cutoff is used to limit the search for common code blocks. We use a dynamic programming approach based on longest_common_substring *)  
 let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock) 
       (complexity_cutoff: int) fmt =
   let arr1 = Array.of_list lst1 and arr2 = Array.of_list lst2 in
@@ -509,11 +499,9 @@ let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock)
   let () = if should_log "debug" then Format.fprintf fmt "Maximum complexity is %d \n" !max_complexity in
  (!lcs, !max_complexity)
 
-(* This is really inefficient, we should fix it *)
+(* Recursively perform branch distribution for a given block *)
 let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
-
   let () = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Running Branch Distribution with cutoff of %d \n" c in
-
   let rec bd_ll a code_block =
     let bd_ll = bd_ll a in
     match code_block with
@@ -542,15 +530,7 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
        )
      | CWhile (logic, block) -> [CWhile(logic, bd_bb block)]
      | CFor (lst1, logic, lst2, block) -> [CFor(lst1, logic, lst2, bd_bb block)]
-     | CAssign (CArr (CVar _, [e]), _, _) ->
-        (*(match !(ann e) with
-         | None -> Printf.printf "not annotated"
-         | Some (lb, ub) ->
-            Format.fprintf Format.std_formatter "%a in [%a, %a]\n"
-              CUDA.print_cexpr e
-              CUDA.print_cexpr (expr_eval lb)
-              CUDA.print_cexpr (expr_eval ub)
-        );*) [code]
+     | CAssign (CArr (CVar _, [e]), _, _) -> [code]
      | _ -> [code]
    ) @ bd_ll rest
   and bd_lb a l = (a, bd_ll a l)
@@ -561,7 +541,7 @@ let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
 type bound = unit expr
 type ablock = (bound * bound * bound) option ref cblock
 
-
+(* Get the maximum code complexity in a given block *)
 let get_max_bd_code_complexity block fmt = 
   let rec helper code_block complexity = 
     match code_block with
@@ -583,43 +563,21 @@ let get_max_bd_code_complexity block fmt =
 
 
 
-let rec find_array_ids vctx p m ((annot, block): ablock)  = 
-  let rec find_clval_arr_id (clv: 'a clval): (string * bound * bound) list = 
-    match clv with
-    | CArr( CVar(clv), [cexpr]) ->
-       (match !(ann cexpr) with
-        | None -> failwith "not annotated"
-        | Some (lb, ub, diff) -> [(clv, lb, ub)]
-       )
-    | CDeref clv -> find_clval_arr_id clv
-    | CRef clv -> find_clval_arr_id clv
-    | _ -> []
-  
-
-  in
-  match block with
-  | [] -> []
-  | code :: rest ->
-    (match code with
-    | CAssign(clv, ce, b) -> find_clval_arr_id clv
-    | _ -> []
-    ) @ find_array_ids vctx p m (annot, rest)
+(* Determine if a parameter has a base type that might contain an array *)
+let is_param_bt_array param =
+  let (_, bt) = param in
+    match bt with
+    | C.PTR _ | C.ARRAY _ -> true
+    | _ -> false 
 
 
-
-    let is_param_bt_array param =
-      let (_, bt) = param in
-        match bt with
-        | C.PTR _ | C.ARRAY _ -> true
-        | _ -> false 
-
-
-let process_bounds id bounds: (string * ((unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_)) option list) = (
+(* Processes the bound into a format we can work with *)
+let process_bounds id bounds: (string * (CUDA_Types.bound * CUDA_Types.bound * CUDA_Types.bound) option list) = (
   let bound_refs = List.map (!) (List.map ann bounds) in (id, bound_refs)
 )
 
-
-let print_is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :unit = (
+(* Helper function to print out information about the bound *)
+let print_is_bound_sharable (lb:CUDA_Types.bound) (ub:CUDA_Types.bound) (size: CUDA_Types.bound) fmt :unit = (
   let _ = Format.fprintf fmt "The lb is %a \n" CUDA.print_cexpr (expr_eval lb) in
   let _ = Format.fprintf fmt "The ub is %a \n" CUDA.print_cexpr (expr_eval ub) in
   let _ = Format.fprintf fmt "The size is %a \n" CUDA.print_cexpr (expr_eval size) in
@@ -635,7 +593,9 @@ let print_is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :un
   in Format.fprintf fmt "Sharable is %s \n\n" answer
 )
 
-let is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :bool = (
+(* Given the set of lower bound, upper bound and size, determine if a parameter can be moved to shared.fun_args
+   NOTE: We might need to keep it conservative, as some bounds can be moved into shared but we can't tell with bounds alone *)
+let is_bound_sharable (lb:CUDA_Types.bound) (ub:CUDA_Types.bound) (size: CUDA_Types.bound) fmt :bool = (
   let () = print_is_bound_sharable lb ub size fmt in
   let (_,size) = expr_eval size in
   match size with
@@ -648,7 +608,7 @@ let is_bound_sharable lb ub (size:(unit * unit CUDA_Types.cexpr_)) fmt :bool = (
   | _ -> false
 ) 
 
-let find_sharable_ids (cleaned_hashtbl:(id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t) fmt = (
+let find_sharable_ids (cleaned_hashtbl:(id, (id * CUDA_Types.bound * CUDA_Types.bound * CUDA_Types.bound * int) list) Hashtbl.t) fmt = (
   let ids = Hashtbl.fold (fun k _ acc -> k :: acc) cleaned_hashtbl [] in
   let is_id_sharable id:bool = (
     let () = Format.fprintf fmt "INFO - [CUDA_optimize] Checking if id %s is sharable\n" id in
@@ -658,81 +618,86 @@ let find_sharable_ids (cleaned_hashtbl:(id, (id * (unit * unit CUDA_Types.cexpr_
   in List.filter is_id_sharable ids
 )
 
+(* Find array writes finds all the array writes that are also array type params. It also runs process_bounds, as to get the functional bounds of the arrays*)
+let rec find_array_writes block array_param_ids =
+  (match block with 
+    | [] -> []       
+    | cinst :: rest ->
+        (match cinst with
+          | CIf (_, (_, block1), (_, block2)) -> (find_array_writes block1 array_param_ids) @ (find_array_writes block2 array_param_ids)
+          | CWhile (_, (_, block)) -> (find_array_writes block array_param_ids) @ (find_array_writes block array_param_ids)
+          | CFor (i1, _, i2, (_, b)) -> (find_array_writes i1 array_param_ids) @ (find_array_writes i2 array_param_ids) @ (find_array_writes b array_param_ids)
+          | CAssign(CArr(CVar id, cexprs), _, _) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
+          | CAssign(cl, _, _) -> []
+          | _ -> []
+        ) @ find_array_writes rest array_param_ids
+  ) 
+
+let rec find_array_reads block array_param_ids = 
+  let rec find_array_reads_clval clv = (match clv with
+    | CVar id -> []
+    | CArr (CVar(id), cexprs) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
+    | CDeref cl -> find_array_reads_clval cl
+    | CRef cl -> find_array_reads_clval cl
+    | _ -> []
+  ) 
+  and find_array_reads_cexpr exp = let (_, exp) = exp in (match exp with
+    | CL clv -> find_array_reads_clval clv
+    | CAdd (ex1, ex2) -> find_array_reads_cexpr ex1  @ find_array_reads_cexpr ex2
+    | CSub (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+    | CMul (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+    | CDiv (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+    | CMod (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+    | CCall (_, cexprs) -> List.flatten (List.map find_array_reads_cexpr cexprs)
+    | _ -> []
+  )
+  and find_array_reads_clogic log = (match log with
+    | CCmp (ex1, _, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
+    | CAnd (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
+    | COr (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
+    | CNot cl1 -> find_array_reads_clogic cl1
+  )
+in
+  (match block with
+  | [] -> []
+  | cinst :: rest -> (match cinst with
+    | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest array_param_ids
+    | CIf(cl, (_, cb1), (_, cb2)) -> 
+      find_array_reads_clogic cl @ 
+      find_array_reads cb1 array_param_ids@ 
+      find_array_reads cb2 array_param_ids@ 
+      find_array_reads rest array_param_ids
+    | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb array_param_ids @ find_array_reads rest array_param_ids
+    | CFor (cinsts, cl, cinsts1, (_, cb)) -> 
+      find_array_reads cinsts array_param_ids@ 
+      find_array_reads_clogic cl @ 
+      find_array_reads cinsts1 array_param_ids@ 
+      find_array_reads cb array_param_ids@ 
+      find_array_reads rest array_param_ids
+    | CReturn ex -> find_array_reads_cexpr ex
+    | _ -> find_array_reads rest array_param_ids
+  )
+) 
+
 
 (* Finds the bounds of ALL the params, then stores it into the hashtable *)
-let gen_bound_hashtbl (t, id, params, block, b) fmt : (id, (id * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * (unit * unit CUDA_Types.cexpr_) * int) list) Hashtbl.t = (
+let gen_bound_hashtbl (t, id, params, block, b) fmt : (id, (id * CUDA_Types.bound * CUDA_Types.bound * CUDA_Types.bound * int) list) Hashtbl.t = (
 
   let array_params = List.filter is_param_bt_array params in
   let array_param_ids = List.map (fun (id, _) -> id) array_params in 
   let () = if should_log "info" then Format.fprintf fmt "INFO - [CUDA_optimize] - Generating the bounds hashtable\n" in
 
   (* Now start looking at the blocks *)
-  (* Find array writes finds all the array writes that are also array type params *)
-  let rec find_array_writes block =
-    (match block with 
-      | [] -> []       
-      | cinst :: rest ->
-          (match cinst with
-            | CIf (_, (_, block1), (_, block2)) -> (find_array_writes block1) @ (find_array_writes block2)
-            | CWhile (_, (_, block)) -> (find_array_writes block) @ (find_array_writes block)
-            | CFor (i1, _, i2, (_, b)) -> (find_array_writes i1) @ (find_array_writes i2) @ (find_array_writes b)
-            | CAssign(CArr(CVar id, cexprs), _, _) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
-            | CAssign(cl, _, _) -> []
-            | _ -> []
-          ) @ find_array_writes rest
-    ) in
-
-  let rec find_array_reads block = 
-    let rec find_array_reads_clval clv = (match clv with
-      | CVar id -> []
-      | CArr (CVar(id), cexprs) -> if (List.mem id array_param_ids) then [process_bounds id cexprs] else []
-      | CDeref cl -> find_array_reads_clval cl
-      | CRef cl -> find_array_reads_clval cl
-      | _ -> []
-    ) 
-    and find_array_reads_cexpr exp = let (_, exp) = exp in (match exp with
-      | CL clv -> find_array_reads_clval clv
-      | CAdd (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CSub (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CMul (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CDiv (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CMod (ex1, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CCall (_, cexprs) -> List.flatten (List.map find_array_reads_cexpr cexprs)
-      | _ -> []
-    )
-    and find_array_reads_clogic log = (match log with
-      | CCmp (ex1, _, ex2) -> find_array_reads_cexpr ex1 @ find_array_reads_cexpr ex2
-      | CAnd (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
-      | COr (cl1, cl2) -> find_array_reads_clogic cl1 @ find_array_reads_clogic cl2
-      | CNot cl1 -> find_array_reads_clogic cl1
-    )
-  in
-    (match block with
-    | [] -> []
-    | cinst :: rest -> (match cinst with
-      | CAssign(clv, ex1, _) -> find_array_reads_cexpr ex1 @ find_array_reads rest
-      | CIf(cl, (_, cb1), (_, cb2)) -> 
-        find_array_reads_clogic cl @ 
-        find_array_reads cb1 @ 
-        find_array_reads cb2 @ 
-        find_array_reads rest
-      | CWhile (cl, (_, cb)) -> find_array_reads_clogic cl @ find_array_reads cb @ find_array_reads rest
-      | CFor (cinsts, cl, cinsts1, (_, cb)) -> 
-        find_array_reads cinsts @ 
-        find_array_reads_clogic cl @ 
-        find_array_reads cinsts1 @ 
-        find_array_reads cb @ 
-        find_array_reads rest
-      | CReturn ex -> find_array_reads_cexpr ex
-      | _ -> find_array_reads rest
-    )
-  ) in
-  
   let (_,block_contents) = block in
-  let array_writes = find_array_writes block_contents in
-  let array_reads = find_array_reads block_contents in
+  let array_writes = find_array_writes block_contents array_param_ids in
+  let array_reads = find_array_reads block_contents array_param_ids in
+  (* Generating the hashtable 
+     bounds_hashtbl is an intermediate hashtable that stores the bounds of all the params, which will eventually get cleaned up into cleaned_hashtbl
+     cleaned_hashtbl is the final hashtable that stores the bounds of all the params, with duplicates removed. 
 
-  (* Generating the hashtable *)
+     key: id of the param
+    value: list of (id, lb, ub, diff, variant number]) tuples
+  *)
 
   let bounds_hashtbl = Hashtbl.create 50 in
   let cleaned_hashtbl = Hashtbl.create 50 in
@@ -785,14 +750,10 @@ let gen_bound_hashtbl (t, id, params, block, b) fmt : (id, (id * (unit * unit CU
   let () = clean_hashtbl in cleaned_hashtbl
 )
 
-
-let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hashtbl fmt : unit cfunc = (
-    (* Some helper functions*)
-    let print_debug (id, lbs, ubs) =
-      if should_log "debug" then Format.fprintf fmt "ID of %s in with LBS %a AND UBS %a\n"
-      id
-      CUDA.print_cexpr (expr_eval lbs)
-      CUDA.print_cexpr (expr_eval ubs) in
+(* This takes in a func, the list parameters we want to move to shared, and the cleaned_hashtbl of bounds as well as a formatter 
+    and returns a new func with the bounds of the parameters added to the shared memory
+   *)
+let new_global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params cleaned_hashtbl fmt : unit cfunc = (
 
     (* Work with getting the right array params *)
     
@@ -802,18 +763,21 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
     let used_array_params = List.filter (is_in_used) array_params in
 
     let array_param_ids = List.map (fun (id, _) -> id) used_array_params in 
+    let (_,block_contents) = block in
+    let array_writes = find_array_writes block_contents array_param_ids in
+    let array_writes_ids = List.map (fun (id, _) -> id) array_writes in
     let () = if should_log "info" then Format.fprintf fmt "INFO - [CUDA_optimize] - Running Global to Shared on array params: [%s]\n" (String.concat "," array_param_ids) in
 
     (* Helper code for code generation portion *)
-
+    (* Defines the variable that stores (blockIdx.x * blockDim.x) + threadIdx.x *)
     let thread_position_var = emk () (CAdd((emk () (CMul(emk () (CL(CVar("blockIdx.x"))), emk () (CL(CVar("blockDim.x")))))), emk () (CL(CVar("threadIdx.x"))))) in
-
     let get_pointer_bt t = 
       match t with
       | C.ARRAY(bt, expr) -> bt
       | C.PTR bt -> bt
       | _ -> t in
 
+    (* Converts into a clval type *)
     let rec param_to_clval (id, t, arr_idx) ind =
       match arr_idx with
       | Some arr_idx -> 
@@ -829,6 +793,7 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
         | _ -> CVar id
           ) in  
     
+    (* Define the shared arrays and copy globals into them *)
     let global_convert_to_shared = 
       let bring_bound_to_shared (id, bt) (_, lb, ub, diff, variant_num) = (
         let pointer_bt = get_pointer_bt bt in
@@ -857,7 +822,17 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
       
       List.flatten(List.map param_id_to_shared array_param_ids) @ [CSync] in
     
+    (* Copy the changes from the shared arrays back into the globals. It only runs performs the operations on parameters that have been written to *)
     let shared_back_to_global = 
+      let rec intersection lst1 lst2 =
+        match lst1 with
+        | [] -> []
+        | hd::tl ->
+            if List.mem hd lst2 then
+              hd :: intersection tl lst2
+            else
+              intersection tl lst2 in
+
       let shared_back_to_global_helper (id, bt) (_, lb, ub, diff, variant_num)=
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         let variant_num_str = string_of_int variant_num in                            
@@ -873,7 +848,7 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
           let bounds_list = (Hashtbl.find cleaned_hashtbl id) in
           List.map (shared_back_to_global_helper param_pair) bounds_list in
 
-      List.flatten(List.map param_id_to_global array_param_ids) in
+      List.flatten(List.map param_id_to_global (intersection array_param_ids array_writes_ids)) in
       
       (* Useless bound is just there to satisfy the type requirements, and it will eventually get replaced with a unit. *)
       let useless_bound = ref (Some (emk () (CConst(CInt(0))), (emk () (CConst(CInt(0)))), emk () (CConst(CInt(0))))) in
@@ -895,6 +870,7 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
                            let (_, _, _, _, variant_num) = List.find (is_bounds_same lb ub) id_bounds in
                            variant_num in
 
+      (* Renaming means replacing the array variables with their respective shared memory variables *)
       let rec rename_clval (c: 'a clval): 'a clval = 
         
         (match c with
@@ -948,9 +924,6 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
         | _ -> code_instr
 
       and rename_cblock (_, block) = (useless_bound, List.map rename_cinstr block) in
-
-      
-
         let (a, bl) = rename_cblock block in
         let bl_erased = List.map erase_instr bl in 
         let arrs =
@@ -960,32 +933,9 @@ let new_global_to_shared_opt (t, id, params, block, b) used_params cleaned_hasht
                          @ bl_erased
                          @ shared_back_to_global), b)
          in arrs
-
     )
 
-  (* Create combinations of a list of type K *)
-    let rec combnk k lst =
-      if k = 0 then
-        [[]]
-      else
-        let rec inner = function
-          | [] -> []
-          | x :: xs -> (List.map (fun z -> x :: z) (combnk (k - 1) xs)) :: inner xs
-        in
-          List.concat (inner lst)
-
-
-(*
-type cfunc = string * (id * Cabs.base_type) list * cblock * bool
-(* true = is a kernel *)
-
-type cprog = (id * Cabs.base_type * mem) list * cfunc list
- *)
-
  let branch_distribution_prog (cutoff: int) ((globals, funcs): 'a cprog) (used_args) bounds_hashtbl fmt =
-
-  (* let bdf_2 (rt, name, args, code, kernel) = new_global_to_shared_opt (rt, name, args, branch_distribution cutoff code, kernel)
-  in let () = List.hd(List.map bdf_2 funcs) in *)
 
   let bdf (rt, name, args, code, kernel) =
     let distributed = 
@@ -996,32 +946,6 @@ type cprog = (id * Cabs.base_type * mem) list * cfunc list
   in
   (globals, List.map bdf funcs)
    
-(* let branch_distribution_mult (prog: 'a cprog) fmt =
-
-  let (globals, funcs) = prog in
-
-  (* ASSUMPTION THAT THERE IS ONLY ONE FUNCTION IN A FILE! (or that the arguments in each function are the same) *)
-
-  let (_, _, params, (_, code), _) = List.hd funcs in
-  let complexity_score = get_max_bd_code_complexity code fmt in
-
-  let () = Format.fprintf fmt "\n MAX COMPLEXITY IS %d \n" complexity_score in
-
-  let array_params = List.filter is_param_bt_array params in
-  let used_array_param_combinations = List.flatten (List.map (fun n -> combnk (n-1) array_params) (List.init (List.length array_params+1) (fun x -> x + 1))) in
-
-  let bdp c used_array_params = branch_distribution_prog c prog used_array_params fmt in
-
-  (* bdp_params produces a list of (branch_distribution_cutoff, used_array_params, code) *)
-  let bdp_params used_array_params = 
-    if complexity_score > 10 then
-      [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params); (10, used_array_params, bdp 10 used_array_params)]
-    else if complexity_score > 0 then
-      [(~-1, used_array_params, bdp ~-1 used_array_params); (0, used_array_params, bdp 0 used_array_params)] 
-    else [(~-1, used_array_params, bdp ~-1 used_array_params)] in
-  
-  List.flatten (List.map bdp_params used_array_param_combinations) *)
-
 (* Generates a list of (branch_distribution_cutoff, code) for the OptDriver to find the best one of. *)
 let greedy_find_branch_distribution_cutoffs (prog: Graph_Types.annot cprog) fmt = 
   let (globals, funcs) = prog in
@@ -1053,7 +977,6 @@ let greedy_find_array_params (prog: 'a cprog) cutoff current_params sharable_par
   let (globals, funcs) = prog in
   let (_, _, params, (_, code), _) = List.hd funcs in
   let array_params = List.filter is_param_bt_array params in
-  (* let sharable_params = find_sharable_ids cleaned_hashtbl fmt in *)
   
   (* Params that have not already been used *)
   let potential_params = List.filter (fun x -> (not (List.mem x current_params) && (let (id, _) = x in List.mem id sharable_params ))) array_params in
@@ -1063,46 +986,3 @@ let greedy_find_array_params (prog: 'a cprog) cutoff current_params sharable_par
 
   
   
-(** transformations = [optimization_function, optimization_name, required?]
-    return [([performed_optimizations], code)]
-
-*)
-
-
-(* 
-let rec apply_optimizations (block:cblock) (transformations: (CUDA_Types.cinstr list -> CUDA_Types.cinstr list * string * bool) list) = 
-  let add_opt item (opt_fun
-  ) (opt_name) = let (performed_optimizations, code) = item in ([performed_optimizations @ [opt_name], opt_fun code])
-  in  
-  let rec helper (blocks) (transformations: (CUDA_Types.cinstr list -> CUDA_Types.cinstr list * string * bool) list) = 
-    match transformations with 
-    | [] -> blocks
-    | transform :: rest -> (
-      match transform with 
-        | (opt_fun, opt_name, true) -> List.map (add_opt opt_fun opt_name) (blocks)
-        | _ -> blocks
-    )
-  in helper [block] transformations *)
-
-
-
-
-
-(* let cf_func (rt, name, args, body, is_kernel) =
-  new_global_to_shared_opt (rt, name, args, branch_distribution 3 body, is_kernel)
-
-let cf_prog (decls, funcs) =
-  (decls, List.map cf_func funcs) *)
-
-  (*
-let input_file = Sys.argv.(1)
-
-let _ =
-  match Frontc.parse_file input_file stdout with
-  | Frontc.PARSING_ERROR -> failwith "parse error"
-  | Frontc.PARSING_OK ccode ->
-     let cuda = CUDA.cuda_of_file () input_file ccode in
-     let folded = cf_prog cuda in
-     CUDA.print_cprog Format.std_formatter folded
-  
-   *)
