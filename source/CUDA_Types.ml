@@ -101,6 +101,8 @@ type 'a cinstr =
 (* Allows for annotations *)
 and 'a cblock = 'a * 'a cinstr list
 
+type bound = (unit * unit cexpr_)
+
 type 'a cfunc = Cabs.base_type * string * (id * Cabs.base_type) list *
                   'a cblock * bool
 (* true = is a kernel *)
