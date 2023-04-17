@@ -794,12 +794,12 @@ let new_global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params c
         let variant_num_str = string_of_int variant_num in
         let tvar_as_exp = emk () (CL (CVar "__itertemp")) in
         [
-          (* CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
-          CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
+          (* CDecl ("size_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
+          CDecl ("lower_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []);
           (* CDecl ("upper_bound_" ^ id ^ variant_num_str, Local, C.INT(C.LONG, C.SIGNED), []); *)
           (* CAssign(CVar("upper_bound_" ^ id ^ variant_num_str), expr_eval ub, true); *)
-          (* CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
-          CAssign(CVar("size_" ^ id ^ variant_num_str), expr_eval diff, true); *)
+          CAssign(CVar("lower_bound_" ^ id ^ variant_num_str), expr_eval lb, true);
+          (* CAssign(CVar("size_" ^ id ^ variant_num_str), expr_eval diff, true); *)
           CDecl(id ^ variant_num_str, Shared, C.ARRAY(pointer_bt, C.VARIABLE ("BLOCKSIZE")), []);
           (CAssign ((param_to_clval (id ^ variant_num_str,
                                      bt,
