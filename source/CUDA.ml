@@ -682,7 +682,7 @@ let print_for_ending fmt i =
                                  print_for_ending (List.hd s2)
                                  print_cblock s
       | CReturn e -> fprintf fmt "return %a;" print_cexpr e
-      | CSync -> fprintf fmt "__syncthreads()"
+      | CSync -> fprintf fmt "__syncthreads();"
     
     and print_for_decl fmt l =
        match l with
