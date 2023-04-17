@@ -331,18 +331,19 @@ let rec expr_eval (expr: 'a cexpr) : 'a cexpr =
   | _ -> expr
 
 
-let rec logic_eval (logic: 'a clogic) : 'a clogic = 
+(* Evaluate a logical expression *)
+let rec logic_eval (logic: 'a clogic) : 'a clogic =
   match logic with
-  | CCmp (expr1, cmp , expr2) -> CCmp(expr_eval expr1, cmp , expr_eval expr2)
+  | CCmp (expr1, cmp, expr2) -> CCmp(expr_eval expr1, cmp, expr_eval expr2)
   | CAnd (logic1, logic2) -> CAnd(logic_eval logic1, logic_eval logic2)
   | COr (logic1, logic2) -> COr(logic_eval logic1, logic_eval logic2)
   | CNot (logic1) -> CNot(logic_eval logic1)
 
-
-let rec constant_folding ((a, code): 'a cblock) : 'a cblock = 
-  (a, cf_list code)
-and cf_list (l: 'a cinstr list) : 'a cinstr list =
-  match l with
+(* Perform constant folding on a code block *)
+let rec constant_folding ((annotation, code_list): 'a cblock) : 'a cblock =
+  (annotation, fold_constants_list code_list)
+and fold_constants_list (code_list: 'a cinstr list) : 'a cinstr list =
+  match code_list with
   | [] -> []
   | (code :: rest) ->
      (match code with
@@ -353,97 +354,95 @@ and cf_list (l: 'a cinstr list) : 'a cinstr list =
              constant_folding block2)
       | CWhile (logic, block1) ->
          CWhile(logic_eval logic, constant_folding block1)
-      | CFor (block1, logic, block2, block3) ->
-         CFor (cf_list block1, logic_eval logic,
-               cf_list block2, constant_folding block3)
+      | CFor (init_block, loop_logic, update_block, loop_body) ->
+         CFor (fold_constants_list init_block, logic_eval loop_logic,
+               fold_constants_list update_block, constant_folding loop_body)
       | CReturn expr -> CReturn(expr_eval expr)
-      | _ -> code)::cf_list rest
+      | _ -> code)::fold_constants_list rest
 
 
-let rec is_lst_equal(lst1) (lst2) equality_function: bool = 
+let rec are_lists_equal lst1 lst2 eq_function =
   match lst1, lst2 with
   | [], [] -> true
-  | [], _ -> false
-  | _, [] -> false
-  | x::xs, y::ys -> equality_function x y && is_lst_equal xs ys equality_function
+  | [], _ | _, [] -> false
+  | x :: xs, y :: ys -> eq_function x y && are_lists_equal xs ys eq_function
 
-let rec is_const_equal(c1: const) (c2: const) : bool =
+let rec are_consts_equal c1 c2 =
   match c1, c2 with
   | CInt i1, CInt i2 -> i1 = i2
   | CFloat f1, CFloat f2 -> f1 = f2
   | CString s1, CString s2 -> s1 = s2
   | CChar c1, CChar c2 -> c1 = c2
-  | CPtr (i1, i2), CPtr(i11, i22) -> (i1 = i11) && (i2 = i22)
-  | _ , _ -> false
+  | CPtr (i1, i2), CPtr (i11, i22) -> i1 = i11 && i2 = i22
+  | _, _ -> false
 
-let is_param_equal(param1: cparam) (param2: cparam) : bool = 
-  let is_dim_equal (d1: dim) (d2: dim) : bool = 
-    match d1, d2 with
-    | X, X -> true
-    | Y, Y -> true
-    | Z, Z -> true
-    | _ , _ -> false
-
-  in
+let are_params_equal param1 param2 =
   match param1, param2 with
   | WarpSize, WarpSize -> true
-  | GridDim d1, GridDim d2 -> is_dim_equal d1 d2
-  | BlockIdx b1, BlockIdx b2 -> is_dim_equal b1 b2
-  | BlockDim b1, BlockDim b2 -> is_dim_equal b1 b2
-  | ThreadIdx t1, ThreadIdx t2 -> is_dim_equal t1 t2
-  | _ , _ -> false
+  | GridDim d1, GridDim d2
+  | BlockIdx d1, BlockIdx d2
+  | BlockDim d1, BlockDim d2
+  | ThreadIdx d1, ThreadIdx d2 -> d1 = d2
+  | _, _ -> false
 
-let rec is_clval_equal (val1 : 'a clval) (val2 : 'a clval) : bool = 
+let rec are_clvals_equal val1 val2 =
   match val1, val2 with
   | CVar a, CVar b -> a = b
-  | CArr (v1, lst1), CArr(v2, lst2) -> is_clval_equal v1 v2 && is_lst_equal lst1 lst2 is_expr_equal
-  | CDeref a, CDeref b -> is_clval_equal a b
-  | CRef a, CRef b -> is_clval_equal a b
-  | _ , _ -> false 
-  
-and is_expr_equal(expr1: 'a cexpr) (expr2: 'a cexpr) : bool = 
+  | CArr (v1, lst1), CArr (v2, lst2) ->
+      are_clvals_equal v1 v2 && are_lists_equal lst1 lst2 are_exprs_equal
+  | CDeref a, CDeref b -> are_clvals_equal a b
+  | CRef a, CRef b -> are_clvals_equal a b
+  | _, _ -> false
+
+and are_exprs_equal expr1 expr2 =
   match edesc expr1, edesc expr2 with
-  | CL v1, CL v2 -> is_clval_equal v1 v2
-  | CConst c1, CConst c2 -> is_const_equal c1 c2
-  | CParam p1, CParam p2 -> is_param_equal p1 p2
-  | CAdd (e1, e2), CAdd(e11, e22) -> (is_expr_equal e1 e11 && is_expr_equal e2 e22) || (is_expr_equal e1 e22 && is_expr_equal e2 e11)
-  | CSub (e1, e2), CSub(e11, e22) -> is_expr_equal e1 e11 && is_expr_equal e2 e22
-  | CMul (e1, e2), CMul(e11, e22) -> (is_expr_equal e1 e11 && is_expr_equal e2 e22) || (is_expr_equal e1 e22 && is_expr_equal e2 e11)
-  | CDiv (e1, e2), CDiv(e11, e22) -> is_expr_equal e1 e11 && is_expr_equal e2 e22
-  | CMod (e1, e2), CMod(e11, e22) -> is_expr_equal e1 e11 && is_expr_equal e2 e22
-  | CCall (s1, e1), CCall(s2, e2) -> if s1 = s2 then (is_lst_equal e1 e2 is_expr_equal) else false
-  | _ , _ -> false  
+  | CL v1, CL v2 -> are_clvals_equal v1 v2
+  | CConst c1, CConst c2 -> are_consts_equal c1 c2
+  | CParam p1, CParam p2 -> are_params_equal p1 p2
+  | CAdd (e1, e2), CAdd (e11, e22)
+  | CMul (e1, e2), CMul (e11, e22) ->
+      (are_exprs_equal e1 e11 && are_exprs_equal e2 e22)
+      || (are_exprs_equal e1 e22 && are_exprs_equal e2 e11)
+  | CSub (e1, e2), CSub (e11, e22)
+  | CDiv (e1, e2), CDiv (e11, e22)
+  | CMod (e1, e2), CMod (e11, e22) -> are_exprs_equal e1 e11 && are_exprs_equal e2 e22
+  | CCall (s1, e1), CCall (s2, e2) ->
+      s1 = s2 && are_lists_equal e1 e2 are_exprs_equal
+  | _, _ -> false
 
-let rec is_logic_equal(l1: 'a clogic) (l2: 'a clogic) : bool =
-    match l1, l2 with
-    | CCmp (e1, c1, e2), CCmp(e11, c2, e22) -> 
-      if c1 = c2 then (
-        match c1 with 
-        | Eq -> (is_expr_equal e1 e11 && is_expr_equal e2 e22) || (is_expr_equal e1 e22 && is_expr_equal e2 e11)
-        | Ne -> (is_expr_equal e1 e11 && is_expr_equal e2 e22) || (is_expr_equal e1 e22 && is_expr_equal e2 e11)
-        | _ -> is_expr_equal e1 e11 && is_expr_equal e2 e22
-        ) else false
-    | CAnd (cl1, cl2), CAnd (cl11, cl22) -> ((is_logic_equal cl1 cl11) && (is_logic_equal cl2 cl22 )) || ((is_logic_equal cl1 cl22) && (is_logic_equal cl2 cl11))
-    | COr (cl1, cl2), COr(cl11, cl22) -> ((is_logic_equal cl1 cl11) && (is_logic_equal cl2 cl22 )) || ((is_logic_equal cl1 cl22) && (is_logic_equal cl2 cl11))
-    | CNot c1, CNot c2 -> is_logic_equal c1 c2
-    | _, _ -> false
-  
-  
-let rec is_instr_equal(instr1: 'a cinstr) (instr2: 'a cinstr) : bool = 
+let rec are_logics_equal l1 l2 =
+  match l1, l2 with
+  | CCmp (e1, c1, e2), CCmp (e11, c2, e22) ->
+      c1 = c2
+      && ( (c1 = Eq || c1 = Ne)
+          && ( (are_exprs_equal e1 e11 && are_exprs_equal e2 e22)
+            || (are_exprs_equal e1 e22 && are_exprs_equal e2 e11) )
+          || are_exprs_equal e1 e11 && are_exprs_equal e2 e22 )
+  | CAnd (cl1, cl2), CAnd (cl11, cl22)
+  | COr (cl1, cl2), COr (cl11, cl22) ->
+      (are_logics_equal cl1 cl11 && are_logics_equal cl2 cl22)
+      || (are_logics_equal cl1 cl22 && are_logics_equal cl2 cl11)
+  | CNot c1, CNot c2 -> are_logics_equal c1 c2
+  | _, _ -> false
+
+let rec are_instrs_equal instr1 instr2 =
   match instr1, instr2 with
-  | CBreak, CBreak -> true
-  | CAssign (cv1, ce1, b1), CAssign(cv2, ce2, b2) -> if b1 = b2 then (is_clval_equal cv1 cv2) && (is_expr_equal ce1 ce2) else false  
-  | CIf (l1, b1, b2), CIf(l11, b11, b22) -> is_logic_equal l1 l11 && is_block_equal b1 b11 && is_block_equal b2 b22
-  | CWhile (l1, b1), CWhile(l2, b2) -> is_logic_equal l1 l2 && is_block_equal b1 b2
-  | CFor(i1, l1, i2, b1), CFor(i11, l11, i22, b11) -> (is_lst_equal i1 i11 is_instr_equal) && (is_logic_equal l1 l11) && (is_lst_equal i2 i22 is_instr_equal) && is_block_equal b1 b11
-  | CReturn e1, CReturn e2 -> is_expr_equal e1 e2
-  | CSync, CSync -> true
-  | CDecl (id1, mem1, cabs1, lst1), CDecl (id2, mem2, cabs2, lst2) -> id1 = id2 && lst1 = lst2 && (mem1 = mem2)
-  | _ , _ -> false
+  | CBreak, CBreak | CSync, CSync -> true
+  | CAssign (cv1, ce1, b1), CAssign (cv2, ce2, b2) ->
+      b1 = b2 && are_clvals_equal cv1 cv2 && are_exprs_equal ce1 ce2
+  | CIf (l1, b1, b2), CIf (l11, b11, b22) ->
+      are_logics_equal l1 l11 && are_blocks_equal b1 b11 && are_blocks_equal b2 b22
+  | CWhile (l1, b1), CWhile (l2, b2) -> are_logics_equal l1 l2 && are_blocks_equal b1 b2
+  | CFor (i1, l1, i2, b1), CFor (i11, l11, i22, b11) ->
+      are_lists_equal i1 i11 are_instrs_equal && are_logics_equal l1 l11
+      && are_lists_equal i2 i22 are_instrs_equal && are_blocks_equal b1 b11
+  | CReturn e1, CReturn e2 -> are_exprs_equal e1 e2
+  | CDecl (id1, mem1, cabs1, lst1), CDecl (id2, mem2, cabs2, lst2) ->
+      id1 = id2 && lst1 = lst2 && mem1 = mem2
+  | _, _ -> false
 
-
-and is_block_equal((_, block1): 'a cblock) ((_, block2): 'a cblock) : bool = 
-  is_lst_equal block1 block2 is_instr_equal
+and are_blocks_equal (_, block1) (_, block2) =
+  are_lists_equal block1 block2 are_instrs_equal
 
 
 (** ---------------------------------------------------------------------------------- *)
@@ -467,79 +466,74 @@ and get_complexity_scores ((_, block) : 'a cblock) : int =
 
 (* Find the longest common code block between two blocks,
    and return the common code and their respective previous and next segments, as well as the max_complexity.
-   Complexity cutoff is used to limit the search for common code blocks. We use a dynamic programming approach based on longest_common_substring *)  
-let longest_common_codeblock ((_, lst1): 'a cblock) ((_, lst2): 'a cblock) 
-      (complexity_cutoff: int) fmt =
-  let arr1 = Array.of_list lst1 and arr2 = Array.of_list lst2 in
-  let m = Array.length arr1 and n = Array.length arr2 in
-  let () = if should_log "debug" then Format.fprintf fmt "Length of array 1 is %d \n" m in
-  let () = if should_log "debug" then Format.fprintf fmt "Length of array 2 is %d \n" n in
-  let counter = Array.make_matrix (m+1) (n+1) 0 in
+   Complexity cutoff is used to limit the search for common code blocks. We use a dynamic programming approach based on longest_common_substring *)
+let longest_common_codeblock ((_, list1): 'a cblock) ((_, list2): 'a cblock) (complexity_cutoff: int) fmt =
+  let array1 = Array.of_list list1 and array2 = Array.of_list list2 in
+  let length1 = Array.length array1 and length2 = Array.length array2 in
+  let () = if should_log "debug" then Format.fprintf fmt "Length of array 1 is %d \n" length1 in
+  let () = if should_log "debug" then Format.fprintf fmt "Length of array 2 is %d \n" length2 in
+  let counter_matrix = Array.make_matrix (length1 + 1) (length2 + 1) 0 in
   let max_complexity = ref 0 in
-  let lcs = ref (None, None, None, None, None) in
-  for i = 0 to (m - 1) do
-    for j = 0 to (n - 1) do
-      if is_instr_equal arr1.(i) arr2.(j) then
-        let c = counter.(i).(j) + 1 in
-          counter.(i+1).(j+1) <- c;
-        let complexity = get_complexity_scores_l (Array.to_list (Array.sub arr1 (i-c+1) c)) in
-        (* let () = Format.fprintf Format.std_formatter "C = %d, I = %d, J = %d\n" c i j in  *)
-        if complexity > !max_complexity then
-          let () = Format.fprintf fmt "" in
-          max_complexity := complexity;
-          if !max_complexity >= complexity_cutoff then
-          lcs := (Some (Array.to_list (Array.sub arr1 (i-c+1) c)),
-                  Some (Array.to_list (Array.sub arr1 (0) (i-c+1))),
-                  Some (Array.to_list (Array.sub arr1 (i+1) (m-i-1))),
-                  Some (Array.to_list (Array.sub arr2 (0) (j-c+1))),
-                  Some (Array.to_list (Array.sub arr2 (j+1) (n-j-1))));
-        else lcs := !lcs;
-        done
-      done;
+  let longest_common_subblock = ref (None, None, None, None, None) in
+  for i = 0 to (length1 - 1) do
+  for j = 0 to (length2 - 1) do
+    if are_instrs_equal array1.(i) array2.(j) then
+      let count = counter_matrix.(i).(j) + 1 in
+        counter_matrix.(i+1).(j+1) <- count;
+      let complexity = get_complexity_scores_l (Array.to_list (Array.sub array1 (i-count+1) count)) in
+      if complexity > !max_complexity then
+        let () = Format.fprintf fmt "" in
+        max_complexity := complexity;
+        if !max_complexity >= complexity_cutoff then
+          longest_common_subblock := (Some (Array.to_list (Array.sub array1 (i-count+1) count)),
+                                      Some (Array.to_list (Array.sub array1 (0) (i-count+1))),
+                                      Some (Array.to_list (Array.sub array1 (i+1) (length1-i-1))),
+                                      Some (Array.to_list (Array.sub array2 (0) (j-count+1))),
+                                      Some (Array.to_list (Array.sub array2 (j+1) (length2-j-1))));
+        else longest_common_subblock := !longest_common_subblock;
+      done
+    done;
   let () = if should_log "debug" then Format.fprintf fmt "Maximum complexity is %d \n" !max_complexity in
- (!lcs, !max_complexity)
+  (!longest_common_subblock, !max_complexity)
+
 
 (* Recursively perform branch distribution for a given block *)
-let rec branch_distribution (c: int) ((a, code_block): 'a cblock) fmt =
-  let () = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Running Branch Distribution with cutoff of %d \n" c in
-  let rec bd_ll a code_block =
-    let bd_ll = bd_ll a in
+let rec branch_distribution (cutoff: int) ((annotation, code_block): 'a cblock) fmt =
+  let () = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Running Branch Distribution with cutoff of %d \n" cutoff in
+  let rec process_instr_list annotation code_block =
+    let process_instr_list = process_instr_list annotation in
     match code_block with
- | [] -> []
- | code :: rest -> 
-   (
-     match code with 
-     | CIf (logic, block1, block2) -> 
-       let (common_code, _) = longest_common_codeblock block1 block2 c fmt in
-       (
-         match common_code with
-         | (None, None, None, None, None) ->
-            [CIf (logic, bd_bb block1,
-                  bd_bb block2)]
-         | (Some common, Some prev1, Some after1, Some prev2, Some after2) -> (match prev1, after1, prev2, after2 with
-          | [], [], [], [] -> bd_ll common
-          | [], _, [], _ -> bd_ll common @ [CIf(logic, bd_lb a after1,
-                                                bd_lb a after2)]
-          | _, [], _, [] -> [CIf(logic, bd_lb a prev1, bd_lb a prev2)] @
-                              bd_ll common
-          | _, _, _, _ -> [CIf(logic, bd_lb a prev1, bd_lb a prev2)] @
-                            bd_ll common @
-                              [CIf(logic, bd_lb a after1, bd_lb a after2)]
-          )
-         | _ -> [code]
-       )
-     | CWhile (logic, block) -> [CWhile(logic, bd_bb block)]
-     | CFor (lst1, logic, lst2, block) -> [CFor(lst1, logic, lst2, bd_bb block)]
-     | CAssign (CArr (CVar _, [e]), _, _) -> [code]
-     | _ -> [code]
-   ) @ bd_ll rest
-  and bd_lb a l = (a, bd_ll a l)
-  and bd_bb (a, b) = (a, bd_ll a b)
-  and bd_bl (a, b) = bd_ll a b
-  in bd_bb (a, code_block)
-
-type bound = unit expr
-type ablock = (bound * bound * bound) option ref cblock
+      | [] -> []
+      | code :: rest -> 
+        (
+          match code with 
+          | CIf (logic, block1, block2) -> 
+            let (common_code, _) = longest_common_codeblock block1 block2 cutoff fmt in
+            (
+              match common_code with
+              | (None, None, None, None, None) ->
+                 [CIf (logic, process_annotated_block block1,
+                       process_annotated_block block2)]
+              | (Some common, Some prev1, Some after1, Some prev2, Some after2) -> (match prev1, after1, prev2, after2 with
+               | [], [], [], [] -> process_instr_list common
+               | [], _, [], _ -> process_instr_list common @ [CIf(logic, process_annotated_list annotation after1,
+                                                                 process_annotated_list annotation after2)]
+               | _, [], _, [] -> [CIf(logic, process_annotated_list annotation prev1, process_annotated_list annotation prev2)] @
+                                   process_instr_list common
+               | _, _, _, _ -> [CIf(logic, process_annotated_list annotation prev1, process_annotated_list annotation prev2)] @
+                                 process_instr_list common @
+                                   [CIf(logic, process_annotated_list annotation after1, process_annotated_list annotation after2)]
+               )
+              | _ -> [code]
+            )
+          | CWhile (logic, block) -> [CWhile(logic, process_annotated_block block)]
+          | CFor (lst1, logic, lst2, block) -> [CFor(lst1, logic, lst2, process_annotated_block block)]
+          | CAssign (CArr (CVar _, [e]), _, _) -> [code]
+          | _ -> [code]
+        ) @ process_instr_list rest
+  and process_annotated_list annotation lst = (annotation, process_instr_list annotation lst)
+  and process_annotated_block (annotation, block) = (annotation, process_instr_list annotation block)
+  in process_annotated_block (annotation, code_block)
 
 (* Get the maximum code complexity in a given block *)
 let get_max_bd_code_complexity block fmt = 
