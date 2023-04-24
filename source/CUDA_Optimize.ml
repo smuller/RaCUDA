@@ -467,14 +467,14 @@ and get_complexity_scores ((_, block) : 'a cblock) : int =
 (* Find the longest common code block between two blocks,
    and return the common code and their respective previous and next segments, as well as the max_complexity.
    Complexity cutoff is used to limit the search for common code blocks. We use a dynamic programming approach based on longest_common_substring *)
-let longest_common_codeblock ((_, list1): 'a cblock) ((_, list2): 'a cblock) (complexity_cutoff: int) fmt =
+let most_complex_common_codeblock ((_, list1): 'a cblock) ((_, list2): 'a cblock) (complexity_cutoff: int) fmt =
   let array1 = Array.of_list list1 and array2 = Array.of_list list2 in
   let length1 = Array.length array1 and length2 = Array.length array2 in
   let () = if should_log "debug" then Format.fprintf fmt "Length of array 1 is %d \n" length1 in
   let () = if should_log "debug" then Format.fprintf fmt "Length of array 2 is %d \n" length2 in
   let counter_matrix = Array.make_matrix (length1 + 1) (length2 + 1) 0 in
   let max_complexity = ref 0 in
-  let longest_common_subblock = ref (None, None, None, None, None) in
+  let most_complex_common_subblock = ref (None, None, None, None, None) in
   for i = 0 to (length1 - 1) do
   for j = 0 to (length2 - 1) do
     if are_instrs_equal array1.(i) array2.(j) then
@@ -485,16 +485,16 @@ let longest_common_codeblock ((_, list1): 'a cblock) ((_, list2): 'a cblock) (co
         let () = Format.fprintf fmt "" in
         max_complexity := complexity;
         if !max_complexity >= complexity_cutoff then
-          longest_common_subblock := (Some (Array.to_list (Array.sub array1 (i-count+1) count)),
+          most_complex_common_subblock := (Some (Array.to_list (Array.sub array1 (i-count+1) count)),
                                       Some (Array.to_list (Array.sub array1 (0) (i-count+1))),
                                       Some (Array.to_list (Array.sub array1 (i+1) (length1-i-1))),
                                       Some (Array.to_list (Array.sub array2 (0) (j-count+1))),
                                       Some (Array.to_list (Array.sub array2 (j+1) (length2-j-1))));
-        else longest_common_subblock := !longest_common_subblock;
+        else most_complex_common_subblock := !most_complex_common_subblock;
       done
     done;
   let () = if should_log "debug" then Format.fprintf fmt "Maximum complexity is %d \n" !max_complexity in
-  (!longest_common_subblock, !max_complexity)
+  (!most_complex_common_subblock, !max_complexity)
 
 
 (* Recursively perform branch distribution for a given block *)
@@ -508,7 +508,7 @@ let rec branch_distribution (cutoff: int) ((annotation, code_block): 'a cblock) 
         (
           match code with 
           | CIf (logic, block1, block2) -> 
-            let (common_code, _) = longest_common_codeblock block1 block2 cutoff fmt in
+            let (common_code, _) = most_complex_common_codeblock block1 block2 cutoff fmt in
             (
               match common_code with
               | (None, None, None, None, None) ->
@@ -544,7 +544,7 @@ let get_max_bd_code_complexity block fmt =
       (
         match code with 
           | CIf (logic, (a1, block1), (a2, block2)) -> (
-            let (_, score) = longest_common_codeblock (a1, block1) (a2, block2) 0 fmt in
+            let (_, score) = most_complex_common_codeblock (a1, block1) (a2, block2) 0 fmt in
             (* let _ = (if score > 0 then Format.fprintf fmt "GOtta complex of : [%d]\n" score else ()) in *)
             max (max (max (helper block1 complexity) (helper block2 complexity)) (max score complexity)) (helper rest complexity)
           )
@@ -747,7 +747,7 @@ let gen_bound_hashtbl (t, id, params, block, b) fmt : (id, (id * CUDA_Types.boun
 (* This takes in a func, the list parameters we want to move to shared, and the cleaned_hashtbl of bounds as well as a formatter 
     and returns a new func with the bounds of the parameters added to the shared memory
    *)
-let new_global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params cleaned_hashtbl fmt : unit cfunc = (
+let global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params cleaned_hashtbl fmt : unit cfunc = (
 
     (* Work with getting the right array params *)
     
@@ -936,7 +936,7 @@ let new_global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params c
       if cutoff > ~-1 
         then branch_distribution cutoff code fmt
         else (let _ = if should_log "info" then Format.fprintf fmt "\nINFO - [CUDA_optimize] - Not running branch distribution \n" in code) in 
-    new_global_to_shared_opt (rt, name, args, distributed, kernel) used_args bounds_hashtbl fmt
+    global_to_shared_opt (rt, name, args, distributed, kernel) used_args bounds_hashtbl fmt
   in
   (globals, List.map bdf funcs)
    
