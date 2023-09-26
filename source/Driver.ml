@@ -13,9 +13,11 @@
 open Format
 open Types
 (* Use the CFG querier for analysis *)
+(*
 module Cquery_cs = CS_Interop.Make_Graph(Cs_conversion)
 (* For testing .cfg programs *)
 module Cquery_cfg = CS_Interop.Make_Graph(CS_Querier_CFG)
+ *)
 
 let input_file = ref ""
 let main_func = ref None
@@ -97,11 +99,12 @@ let argspec = Arg.align
   ; "-param-file", Arg.String (fun s -> param_file := Some s),
     "<file> use <file> as parameters for CUDA analysis or evaluation"
 
-  ; "-metric", Arg.Symbol (["steps"; "mem"; "divwarps";
+  ; "-metric", Arg.Symbol (["steps"; "wsteps"; "mem"; "divwarps";
                             "global"; "shared"; "debug"],
                            ((fun f s -> cuda_metric := Some (f s))
                               (let open CUDA_Cost in
                                (function "steps" -> cmetric_steps
+                                       | "wsteps" -> cmetric_wsteps
                                        | "mem" -> cmetric_memaccesses
                                        | "divwarps" -> cmetric_divwarps
                                        | "debug" -> cmetric_debug
@@ -169,40 +172,17 @@ let entry () =
     let params = ref None in
 
     (* let globals, g_funcl = try *)
-    let progs_to_analyze = try
+    let prog = try
       (* CFG: if input is in block format *)
       if !input_file = "" then
-        begin
-          Cquery_cfg.init !dump_blk !input_file;
-          let globals = Cquery_cfg.get_glos () in
-          let mainf_name, g_cfg = Cquery_cfg.graph_from_main (not !no_sampling_transformation) tick_var in
-          implicit_main := Some mainf_name;
-          [Utils.add_tick_var tick_var globals, g_cfg, None]
-        end
-      (* CFG: if input file is in CS format *)
-      else if ends_with ".cs" !input_file then
-        begin
-          Cquery_cs.init !dump_blk !input_file;
-          let globals = Cquery_cs.get_glos () in
-          let mainf_name, g_cfg = Cquery_cs.graph_from_main (not !no_sampling_transformation) tick_var in
-          implicit_main := Some mainf_name;
-          [Utils.add_tick_var tick_var globals, g_cfg, None]
-        end
-      (* CFG: if input file is in IMP format *)
-      else if ends_with ".imp" !input_file then
-        let globals, imp_file = IMP.parse_file !input_file in
-        (* transform function calls with arguments and return values *)
-        let globals, imp_file = IMP.function_call_transformation (fun () -> ()) globals imp_file in
-        [Utils.add_tick_var tick_var globals, 
-         List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file,
-        None]
+          failarg  "No input file given"
      (* CFG: if input fule is in CUDA-C format *)
       else if ends_with ".cu" !input_file then
         match Frontc.parse_file !input_file stdout with
         | Frontc.PARSING_ERROR -> failwith "parse error"
         | Frontc.PARSING_OK ccode ->
            let cuda =
-             CUDA.cuda_of_file (fun () -> ()) !input_file ccode in
+             CUDA.cuda_of_file (fun () -> ref None) !input_file ccode in
            let p =
              (match !param_file with
               | Some s -> let (p, _, _) = CUDA_Params.params_of_file s in p
@@ -220,32 +200,13 @@ let entry () =
              (* let _ = IMP_Print.print_prog Format.std_formatter
                 (globals, imp_file) in *)
              (* transform function calls with arguments and return values *)
-             let globals, imp_file = IMP.function_call_transformation (fun () -> ()) globals imp_file in
+             let globals, imp_file = IMP.function_call_transformation (fun () -> ref None) globals imp_file in
              Utils.add_tick_var tick_var globals, 
              List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file,
              Some cuda
            in
-           [ret_cuda_prog cuda]
-           
-      (* CFG: if input file is in LLVM bit-code format *)
-      else if ends_with ".o" !input_file || ends_with ".bc" !input_file then
-        let ic = exec_llvm_reader !input_file in
-        begin 
-          try
-            let gfunc = Graph_Reader.read_func ic in
-            let gfunc = Graph.add_loop_counter tick_var gfunc in
-            [[], [gfunc], None]
-          with End_of_file ->
-            match Unix.close_process_in ic with
-            | Unix.WEXITED 0 -> 
-              failwith "llvm-reader should have failed"
-            | Unix.WEXITED _ -> 
-              Format.eprintf "%s: llvm-reader could not parse '%s'@." Sys.argv.(0) !input_file;
-              raise Utils.Error
-            | _ ->
-              Format.eprintf "%s: llvm-reader process was killed@." Sys.argv.(0);
-              raise Utils.Error
-        end
+           ret_cuda_prog cuda
+
       else 
         begin
           Format.eprintf "%s: unknown input file type for '%s'@." Sys.argv.(0) !input_file;
@@ -413,36 +374,10 @@ let entry () =
     else
       analyze_fun fstart
     in
-    let best =
-      List.fold_left
-        (fun best (globals, g_funcs, Some cuda) ->
-          Format.fprintf Format.std_formatter "Analyzing:";
-          (* CUDA.print_cprog Format.std_formatter cuda; *)
-          match (analyze_prog (globals, g_funcs), best) with
-          | (None, _) -> None
-          | (Some (annot, p), None) -> Some (p, cuda)
-          | (Some (_, p), Some (best_poly, best_prog)) ->
-             if Polynom.Poly.always_less p best_poly then
-               Some (p, cuda)
-             else
-               best
-        )
-        None
-        progs_to_analyze
-    in
-    match best with
-    | None -> failwith "impossible"
-    | Some (_, cuda) ->
-       (match !output_opt with
-        | None -> 0
-        | Some file ->
-           let outc = open_out file in
-           let fmt = Format.formatter_of_out_channel outc in
-           let fmtt = Format.make_formatter (fun _ _ _ -> ()) (fun _ -> ()) in
-           CUDA.print_cprog fmtt cuda;
-           close_out outc;
-           0)
-    | _ -> failwith "impossible"
+    let (globals, g_funcs, _) = prog in
+    match analyze_prog (globals, g_funcs) with
+    | Some _ -> 0
+    | _ -> 1
   in
   if !eval then
     if ends_with ".cu" !input_file then
