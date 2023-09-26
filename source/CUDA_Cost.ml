@@ -110,10 +110,21 @@ let cmetric_debug c =
    | KSync -> s "sync");
   0
 
-let cmetric_steps c =
+let cmetric_wsteps c =
   match c with
   | KArrRead (Global, n) -> 5 * n
   | KArrAssign (Global, n) -> 5 * n
+  | KArrRead (Shared, n) -> n
+  | KArrAssign (Shared, n) -> n
+  | KDivWarp -> 0
+  | KElse -> 0
+  | KThen -> 0
+  | _ -> 1
+
+let cmetric_steps c =
+  match c with
+  | KArrRead (Global, n) -> n
+  | KArrAssign (Global, n) -> n
   | KArrRead (Shared, n) -> n
   | KArrAssign (Shared, n) -> n
   | KDivWarp -> 0
