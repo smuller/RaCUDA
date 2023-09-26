@@ -875,7 +875,11 @@ let global_to_shared_opt ((t, id, params, block, b): 'a cfunc) used_params clean
               if is_bound_valid this_bound then 
                 let variant_num_str = string_of_int (bound_to_variant_num id this_bound) in
                 CArr(CVar (id ^ variant_num_str),
-                  emk useless_bound (CL(CVar("threadIdx.x"))) :: (List.map rename_cexpr rest_exp_lst))
+                     emk useless_bound
+                       (CSub (fst_exp,
+                              emk useless_bound
+                                (CL (CVar("lower_bound_" ^ id ^ variant_num_str)))))
+                        :: (List.map rename_cexpr rest_exp_lst))
               else
                 CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst)))
             else CArr(CVar id, (List.map rename_cexpr (fst_exp :: rest_exp_lst))))
