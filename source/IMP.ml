@@ -3,6 +3,7 @@
 open Types
 include IMP_Types
 
+(*
 let parse_file f =
   let lexbuf = Lexing.from_channel (open_in f) in
   IMP_Lexer.init lexbuf f;
@@ -18,7 +19,7 @@ let parse_file f =
       (startp.Lexing.pos_cnum - startp.Lexing.pos_bol + 1)
       (Lexing.lexeme lexbuf);
     raise Utils.Error
-
+ *)
 (* get function by name *)
 let get_f_by_name func_l fn =
   try

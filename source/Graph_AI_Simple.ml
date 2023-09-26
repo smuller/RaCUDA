@@ -413,7 +413,7 @@ module Solver = struct
           if k < 0 then (lbs', ubs', -k) else (ubs', lbs', +k)
         in
         let addscale l (k', l') =
-          let vk = Pervasives.abs (L.coeff v l) in
+          let vk = Stdlib.abs (L.coeff v l) in
           let l = L.mult k l in
           let lcm = Presburger.lcm vk k' in
           let l = L.plus (lcm/vk) l (L.mult (lcm/k') l') in

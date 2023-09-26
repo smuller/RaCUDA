@@ -1,5 +1,7 @@
 (** Association tables over ordered types *)
 
+let p_compare = compare
+
 type ('a,'b) map =
     Empty
   | Node of ('a,'b) map * 'a * 'b * ('a,'b) map * int
@@ -517,26 +519,26 @@ module Compare = struct
 	end
 end
 
-let add x data map = Compare.add Pervasives.compare x data map
-let find x map = Compare.find Pervasives.compare x map
-let mem x map = Compare.mem Pervasives.compare x map
-let remove x map = Compare.remove Pervasives.compare x map
-let interset m1 s2 = Compare.interset Pervasives.compare m1 s2
-let diffset m1 s2 = Compare.diffset Pervasives.compare m1 s2
-let filter f m = Compare.filter Pervasives.compare f m
-let partition f m = Compare.partition Pervasives.compare f m
-let compare cmp m1 m2 = Compare.compare Pervasives.compare cmp m1 m2
-let comparei cmp m1 m2 = Compare.comparei Pervasives.compare cmp m1 m2
-let equal cmp m1 m2 = Compare.equal Pervasives.compare cmp m1 m2
-let equali cmp m1 m2 = Compare.equali Pervasives.compare cmp m1 m2
-let subset cmp m1 m2 = Compare.subset Pervasives.compare cmp m1 m2
-let subseti cmp m1 m2 = Compare.subseti Pervasives.compare cmp m1 m2
-let common f m1 m2 = Compare.common Pervasives.compare f m1 m2
-let commoni f m1 m2 = Compare.commoni Pervasives.compare f m1 m2
-let addmap m1 m2 = Compare.addmap Pervasives.compare m1 m2
-let merge dmerge m1 m2 = Compare.merge Pervasives.compare dmerge m1 m2
-let mergei dmerge m1 m2 = Compare.mergei Pervasives.compare dmerge m1 m2
-let combine dcombine m1 m2 = Compare.combine Pervasives.compare dcombine m1 m2
+let add x data map = Compare.add p_compare x data map
+let find x map = Compare.find p_compare x map
+let mem x map = Compare.mem p_compare x map
+let remove x map = Compare.remove p_compare x map
+let interset m1 s2 = Compare.interset p_compare m1 s2
+let diffset m1 s2 = Compare.diffset p_compare m1 s2
+let filter f m = Compare.filter p_compare f m
+let partition f m = Compare.partition p_compare f m
+let compare cmp m1 m2 = Compare.compare p_compare cmp m1 m2
+let comparei cmp m1 m2 = Compare.comparei p_compare cmp m1 m2
+let equal cmp m1 m2 = Compare.equal p_compare cmp m1 m2
+let equali cmp m1 m2 = Compare.equali p_compare cmp m1 m2
+let subset cmp m1 m2 = Compare.subset p_compare cmp m1 m2
+let subseti cmp m1 m2 = Compare.subseti p_compare cmp m1 m2
+let common f m1 m2 = Compare.common p_compare f m1 m2
+let commoni f m1 m2 = Compare.commoni p_compare f m1 m2
+let addmap m1 m2 = Compare.addmap p_compare m1 m2
+let merge dmerge m1 m2 = Compare.merge p_compare dmerge m1 m2
+let mergei dmerge m1 m2 = Compare.mergei p_compare dmerge m1 m2
+let combine dcombine m1 m2 = Compare.combine p_compare dcombine m1 m2
 
 (** Output signature of the functor {!Mappe.Make}. *)
 module type S = sig

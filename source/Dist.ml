@@ -37,32 +37,6 @@ let rec is_sampling e =
     l : list of parameters.
 *)
 let exec_gsl_caller dt l =
-  let caller = "/gsl_caller" in
-  let exe_paths = [Config.build_path ^ "/../gsl_caller" ^ caller] in 
-  match 
-    List.fold_left 
-    begin
-        fun ic_is_open exe_path ->
-        if ic_is_open = None then
-            try
-                (* check execution permission *)
-                let _ = Unix.access exe_path [Unix.X_OK] in
-                (* generate command line with arguments *)
-                let parameters = List.fold_left 
-                                 (
-                                    fun current_p next_p -> 
-                                    Printf.sprintf "%s %s" current_p next_p
-                                 ) "" l
-                in
-                let cmd = Printf.sprintf "%s %s %s" exe_path dt parameters in 
-                Some (Unix.open_process_in cmd)
-            with Sys_error _ | Unix.Unix_error _ -> None
-        else ic_is_open
-    end None exe_paths
-  with
-  | Some ic -> 
-    ic
-  | None -> 
     Format.eprintf "%s: gls_caller could not be found or run@." Sys.argv.(0);
     raise Utils.Error
 
