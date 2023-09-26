@@ -13,9 +13,11 @@
 open Format
 open Types
 (* Use the CFG querier for analysis *)
+(*
 module Cquery_cs = CS_Interop.Make_Graph(Cs_conversion)
 (* For testing .cfg programs *)
 module Cquery_cfg = CS_Interop.Make_Graph(CS_Querier_CFG)
+ *)
 
 let input_file = ref ""
 let main_func = ref None
@@ -120,28 +122,6 @@ let failarg msg =
   Arg.usage argspec usagemsg;
   exit 1
 
-let exec_llvm_reader f =
-  let reader = "/llvm-reader" in
-  let candidates =
-    [ Config.build_path ^ "/../llvm-reader" ^ reader
-    ] in
-  match
-    List.fold_left (fun ico cand ->
-      if ico = None then
-        try
-          let _ = Unix.access cand [Unix.X_OK] in
-          let cmd = Printf.sprintf "%s %s" cand f in
-          Some (Unix.open_process_in cmd)
-        with Sys_error _ | Unix.Unix_error _ -> None
-      else ico
-    ) None candidates
-  with
-  | Some ic -> ic
-  | None ->
-    Format.eprintf "%s: llvm-reader could not be found or run@."
-      Sys.argv.(0);
-    raise Utils.Error
-
 let ends_with s s' =
   let ls' = String.length s' and ls = String.length s in
   ls' >= ls && String.sub s' (ls' - ls) ls = s
@@ -167,29 +147,7 @@ let entry () =
     let globals, g_funcl = try
       (* CFG: if input is in block format *)
       if !input_file = "" then
-        begin
-          Cquery_cfg.init !dump_blk !input_file;
-          let globals = Cquery_cfg.get_glos () in
-          let mainf_name, g_cfg = Cquery_cfg.graph_from_main (not !no_sampling_transformation) tick_var in
-          implicit_main := Some mainf_name;
-          Utils.add_tick_var tick_var globals, g_cfg
-        end
-      (* CFG: if input file is in CS format *)
-      else if ends_with ".cs" !input_file then
-        begin
-          Cquery_cs.init !dump_blk !input_file;
-          let globals = Cquery_cs.get_glos () in
-          let mainf_name, g_cfg = Cquery_cs.graph_from_main (not !no_sampling_transformation) tick_var in
-          implicit_main := Some mainf_name;
-          Utils.add_tick_var tick_var globals, g_cfg
-        end
-      (* CFG: if input file is in IMP format *)
-      else if ends_with ".imp" !input_file then
-        let globals, imp_file = IMP.parse_file !input_file in
-        (* transform function calls with arguments and return values *)
-        let globals, imp_file = IMP.function_call_transformation globals imp_file in
-        Utils.add_tick_var tick_var globals, 
-        List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file
+        failarg "No input file specified"
      (* CFG: if input fule is in CUDA-C format *)
       else if ends_with ".cu" !input_file then
         match Frontc.parse_file !input_file stdout with
@@ -215,25 +173,6 @@ let entry () =
         let globals, imp_file = IMP.function_call_transformation globals imp_file in
         Utils.add_tick_var tick_var globals, 
         List.map (fun imp_f -> Graph.from_imp (not !no_sampling_transformation) tick_var imp_f) imp_file
-      (* CFG: if input file is in LLVM bit-code format *)
-      else if ends_with ".o" !input_file || ends_with ".bc" !input_file then
-        let ic = exec_llvm_reader !input_file in
-        begin 
-          try
-            let gfunc = Graph_Reader.read_func ic in
-            let gfunc = Graph.add_loop_counter tick_var gfunc in
-            [], [gfunc]
-          with End_of_file ->
-            match Unix.close_process_in ic with
-            | Unix.WEXITED 0 -> 
-              failwith "llvm-reader should have failed"
-            | Unix.WEXITED _ -> 
-              Format.eprintf "%s: llvm-reader could not parse '%s'@." Sys.argv.(0) !input_file;
-              raise Utils.Error
-            | _ ->
-              Format.eprintf "%s: llvm-reader process was killed@." Sys.argv.(0);
-              raise Utils.Error
-        end
       else 
         begin
           Format.eprintf "%s: unknown input file type for '%s'@." Sys.argv.(0) !input_file;

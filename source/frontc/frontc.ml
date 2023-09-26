@@ -138,20 +138,6 @@ let rec trans_old_fun_defs defs =
 		def :: (trans_old_fun_defs defs)
 
 
-(**
- * Convert the given C file abstract repersentation into XML.
- * @param file	C file to convert.
- * @return		XML document result of conversion.
- * @raise UnconsistentDef	Raised if the file contains some old function
- * definition whose one parameter is not defined.
- *)
-let convert_to_xml file =
-	let safe_file = trans_old_fun_defs file in
-	let children = List.flatten (List.map Ctoxml.convert_def safe_file) in
-	let elt = Cxml.new_elt "file" [] children in
-	Cxml.new_simple_doc elt
-
-
 let parse args =
 	let error = ref stderr in
 	let input = ref stdin in

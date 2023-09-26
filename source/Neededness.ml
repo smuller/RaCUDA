@@ -1,6 +1,8 @@
 (* Anlun Xu - 2018 *)
 (* Van Chan Ngo - 2018 *)
 
+let p_compare = compare
+
 open Types
 open Printf
 open Graph
@@ -11,14 +13,14 @@ module NodeVar =
   struct
     type t = node * id
     let compare (n, v) (n', v') = 
-      match Pervasives.compare n n' with
-          0 -> Pervasives.compare v v'
+      match p_compare n n' with
+          0 -> p_compare v v'
         | c -> c
   end
 module Int = 
   struct
     type t = int 
-    let compare = Pervasives.compare
+    let compare = Int.compare
   end 
 module NeededSet = Set.Make(NodeVar)
 module NodeSet = Set.Make(Int)

@@ -47,7 +47,10 @@ let dims_of_type (f, l) t =
          | _ -> raise (InvalidCUDA (f, l, "all but last dimension must be numbered")))
        t
 
-let rec cuda_of_statement (f, l) stmt =
+let rec cuda_of_block (f, l) (d, b) =
+  (List.concat (List.map (cuda_of_definition (f, l)) d) @
+         (cuda_of_statement (f, l) b))
+and cuda_of_statement (f, l) stmt =
   match stmt with
   | C.NOP -> []
   | C.DEFINITION d ->
@@ -55,7 +58,7 @@ let rec cuda_of_statement (f, l) stmt =
   | C.COMPUTATION e ->
      let (ss, _) = cuda_of_expression (f, l) e in
      ss
-  | C.BLOCK b -> cuda_of_statement (f, l) b
+  | C.BLOCK b -> cuda_of_block (f, l) b
   | C.SEQUENCE (s1, s2) ->
      (cuda_of_statement (f, l) s1) @ (cuda_of_statement (f, l) s2)
   | C.IF (e, s1, s2) ->
@@ -319,10 +322,10 @@ and cuda_of_topdef (f, l) d =
   match d with
   | C.FUNDEF ((_, _, (name, t, _, _)), s) ->
      let (params, is_kernel) = handle_proto (f, l) t in
-     ([], [name, params, cuda_of_statement (f, l) s, is_kernel])
+     ([], [name, params, cuda_of_block (f, l) s, is_kernel])
   | C.OLDFUNDEF ((_, _, (name, t, _, _)), _, s) ->
      let (params, is_kernel) = handle_proto (f, l) t in
-     ([], [name, params, cuda_of_statement (f, l) s, is_kernel])
+     ([], [name, params, cuda_of_block (f, l) s, is_kernel])
   | C.DECDEF (t, _, ids) ->
      let mem = mod_of_type true t in
      (List.map (fun (id, t, _, _) -> (id, t, mem)) ids, [])
