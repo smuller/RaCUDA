@@ -118,9 +118,10 @@ and cuda_of_statement da (f, l) stmt =
 and cuda_of_expression da (f, l) expr =
   let (ss, e) = rev_cuda_of_expression da (f, l) expr in
   (List.rev ss, e)
-and logic_of_expr da (f, l) expr =
-  match cuda_of_expression da (f, l) expr with
+and logic_of_expr da (f, l) exp =
+  match cuda_of_expression da (f, l) exp with
   | (ss, Logic l) -> (ss, l)
+  | (ss, Expr e) -> (ss, CCmp (e, Gt, (da (), CConst (CInt 0))))
   | _ -> raise (InvalidCUDA (f, l, "boolean expression expected"))
 and assign_of_expr da (f, l) expr =
   match rev_cuda_of_expression da (f, l) expr with

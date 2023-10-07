@@ -33,6 +33,7 @@ let mk_sizeof ptr_size f t =
     match t with
       VOID -> 0
     | NO_TYPE | STRUCT _ | PROTO _ -> 0
+    | BOOL -> 1
     | INT _ | CHAR _ | BITFIELD _ | FLOAT _ | DOUBLE _ -> f t
     | PTR _ | RESTRICT_PTR _ | ARRAY _ when in_ptr -> ptr_size
     | PTR t | RESTRICT_PTR t -> mk true t
