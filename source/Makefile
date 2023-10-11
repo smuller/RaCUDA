@@ -15,9 +15,10 @@ opt: OptDriver.byte
 frontc: _build/frontc
 
 _build/frontc: frontc/cabs.ml frontc/cxml.ml frontc/clexer.mll frontc/cparser.mly frontc/ctokens.mly frontc/cprint.ml frontc/frontc.ml frontc/ctoxml.ml
-	dune build frontc
-	chmod 777 _build/default/frontc/*
-	mv _build/default/frontc _build/
+#	dune build frontc
+	chmod 777 frontc/_build/default/*
+	mkdir -p _build/default/frontc
+	mv frontc/_build/default/* _build/default/frontc/
 
 clean:
 	rm -fr $(TOOL_NAME) *.native *.byte _build frontc/_build

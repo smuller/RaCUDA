@@ -65,8 +65,12 @@ and cuda_of_statement da (f, l) stmt =
   | C.DEFINITION d ->
      cuda_of_definition da (f, l) d
   | C.COMPUTATION e ->
-     let (ss, _) = cuda_of_expression (f, l) e in
-     ss
+     (match cuda_of_expression (f, l) e with
+      | (ss, Expr e) ->
+         ss @ [CAssign (CVar "__", e, true)]
+      | (ss, Neither) -> ss
+      | _ -> raise (InvalidCUDA (f, l, "expected non-boolean expression"))
+     )
   | C.BLOCK b -> snd (cuda_of_block da (f, l) b)
   | C.SEQUENCE (C.DEFINITION d, C.FOR (e1, e2, e3, s)) ->
      (match List.rev (cuda_of_definition da (f, l) d) with
@@ -112,8 +116,7 @@ and cuda_of_statement da (f, l) stmt =
   | C.GOTO _ -> raise (InvalidCUDA (f, l, "goto not supported, you monster"))
   | C.ASM _ -> raise (InvalidCUDA (f, l, "inline asm not supported"))
   | C.GNU_ASM _ -> raise (InvalidCUDA (f, l, "inline asm not supported"))
-  | C.STAT_LINE (s, f, l) -> (Printf.printf "line\n";
-                              cuda_of_statement (f, l) s)
+  | C.STAT_LINE (s, f, l) -> (cuda_of_statement (f, l) s)
 
 and cuda_of_expression da (f, l) expr =
   let (ss, e) = rev_cuda_of_expression da (f, l) expr in

@@ -37,7 +37,7 @@ let current_handle = ref {
     h_out_channel = stdout;
     h_file_name = "";
     h_gcc = true;
-    h_linerec = false;
+    h_linerec = true;
   }
 
 let interactive (h : handle) = h.h_interactive
