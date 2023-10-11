@@ -33,3 +33,5 @@ doc:
 install_doc: doc $(DATA_DIR)
 	cp -R ../autodoc $(DATADIR)
 	
+clean:
+	rm -f *.cmo *.cmi *.cmx *.cmxa ctokens.ml ctokens.mli cparser.ml cparser.mli clexer.ml

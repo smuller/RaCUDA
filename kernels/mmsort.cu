@@ -203,14 +203,13 @@ __global__ void xorMergeGeneral(int* elts, int* heap, int tid) {
 
 
   for(int j=0; j<PL<<1; j+=2) {
-      temp[j]=myMin(elts[j],elts[j+1]);
-      elts[j+1] = myMax(elts[j],elts[j+1]);
-      elts[j]=temp[j];
+      //temp[j]=myMin(elts[j],elts[j+1]);
+      //elts[j+1] = myMax(elts[j],elts[j+1]);
+      //elts[j]=temp[j];
   }
 
 
   for(int i=32/2; i>0; i=(i>>1)) {
-
 
     for(int j=0; j<PL<<1; j++) {
       temp[j] = shfl_wrapper(elts[j], i, W);
@@ -227,7 +226,7 @@ __global__ void xorMergeGeneral(int* elts, int* heap, int tid) {
         elts[j] = myMin(temp[j],elts[j]);
       }
     }
-  }     
+  }   
 }
 
 // Fill an empty node with the merge of its children

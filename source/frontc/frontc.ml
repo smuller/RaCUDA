@@ -161,7 +161,7 @@ let parse args =
   let file = ref "" in
   let interactive = ref false in
   let gcc = ref true in
-  let linerec = ref false in
+  let linerec = ref true in
 
   (* Scan the arguments *)
   let rec scan args =
