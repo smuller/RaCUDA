@@ -100,10 +100,11 @@
      "<file> use <file> as parameters for CUDA analysis or evaluation"
  
    ; "-metric", Arg.Symbol (["steps"; "mem"; "divwarps";
-                             "global"; "shared"; "debug"],
+                             "global"; "shared"; "debug"; "wsteps"],
                             ((fun f s -> cuda_metric := Some (f s))
                                (let open CUDA_Cost in
                                 (function "steps" -> cmetric_steps
+                                        | "wsteps" -> cmetric_wsteps
                                         | "mem" -> cmetric_memaccesses
                                         | "divwarps" -> cmetric_divwarps
                                         | "debug" -> cmetric_debug
