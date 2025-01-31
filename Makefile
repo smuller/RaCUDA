@@ -1,31 +1,17 @@
+
+
 include config.mk
 
-all: packages/sandbox/done
-	@make --no-print-directory -C source $@
-ifneq ($(LLC),)
-	@make --no-print-directory -C llvm-reader $@
-endif
-ifneq ($(GSL_PREFIX),)
-	@make --no-print-directory -C gsl_caller $@
-endif
+all: config.mk $(TOOL_NAME)
+
+$(TOOL_NAME):
+	cd source && make
+	mv source/Driver.byte $(TOOL_NAME)
 
 clean:
-#	@cd packages && sh build.sh clean
-	@make --no-print-directory -C source clean
-ifneq ($(LLC),)
-	@make --no-print-directory -C llvm-reader $@
-endif
-ifneq ($(GSL_PREFIX),)
-	@make --no-print-directory -C gsl_caller $@
-endif
-
-dist-clean: clean
-	@rm -f config.mk
-
-packages/sandbox/done:
-	@cd packages && sh build.sh
+	cd source && make clean
 
 config.mk:
 	@./configure
 
-.PHONY: all clean dist-clean install
+.PHONY: all clean install
