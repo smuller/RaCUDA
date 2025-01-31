@@ -2,9 +2,7 @@
 
 TOOL_NAME=absynth-cuda
 OUR_PREFIX=/usr
-GMP_PREFIX=/
-MPFR_PREFIX=/
-GSL_PREFIX=/
+CLP_PREFIX=/usr/local
+CUTILS_PREFIX=/usr/local/include/coin-or
 CXX=c++
 CC=cc
-LLC=
