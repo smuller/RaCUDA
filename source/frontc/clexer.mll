@@ -286,7 +286,7 @@ let floatnum = floatraw floatsuffix?
 let imaginary = floatraw 'i' 'F'
 
 let ident = (letter|'_')(letter|decdigit|'_')*
-let blank = [' ' '\t' '\n']
+let blank = [' ' '\t' '\n' '\r\n']
 let escape = '\\' _
 let hex_escape = '\\' ['x' 'X'] hexdigit hexdigit
 let oct_escape = '\\' octdigit  octdigit octdigit
@@ -363,23 +363,27 @@ and comment =
 
 and line_comment =
   parse  "\n"   {()}
+       | "\r\n" {()}
        |   _     {line_comment lexbuf}
 
 (* # <line number> <file name> ... *)
 and line =
   parse '\n'   {initial lexbuf}
+      | '\r\n'   {initial lexbuf}
       | blank    {line lexbuf}
       | intnum    {set_line (int_of_string (Lexing.lexeme lexbuf));
      file lexbuf}
       | _     {endline lexbuf}
 and file =
   parse '\n'    {initial lexbuf}
+      | '\r\n'    {initial lexbuf}
       | blank    {file lexbuf}
       | '"' [^ '"']* '"'  {set_name (rem_quotes (Lexing.lexeme lexbuf));
       endline lexbuf}
       | _     {endline lexbuf}
 and endline =
   parse '\n'     {initial lexbuf}
+      | '\r\n'     {initial lexbuf}
       | _     {endline lexbuf}
 
 and str =
